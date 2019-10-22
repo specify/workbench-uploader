@@ -1,8 +1,8 @@
 module SQLSmart where
 
 import Data.Text (Text)
-import SQL hiding (as)
-import qualified SQL (as)
+import SQL hiding (as, having)
+import qualified SQL
 
 insertValues :: Text -> [Text] -> [[Expr]] -> Statement
 insertValues tableName cols values =
@@ -21,6 +21,7 @@ query terms =
             , selectTerms = terms
             , fromExpr = [TableFactor Dual]
             , where_ = Nothing
+            , SQL.having = Nothing
             , ordering = []
             , limit = Nothing
             }
@@ -77,6 +78,9 @@ as t a = case t of
 suchThat :: QueryExpr -> Expr -> QueryExpr
 suchThat q expr = q { where_ = Just expr }
 
+having :: QueryExpr -> Expr -> QueryExpr
+having q expr = q { SQL.having = Just expr }
+
 orderBy :: QueryExpr -> [OrderTerm] -> QueryExpr
 orderBy q terms = q { ordering = terms }
 
@@ -95,6 +99,9 @@ intLit i = Literal $ IntLit i
 stringLit :: Text -> Expr
 stringLit s = Literal $ TextLit s
 
+null :: Expr
+null = Literal $ NullLit
+
 select :: Expr -> SelectTerm
 select = SelectTerm
 
@@ -109,6 +116,9 @@ project name = IdentExpr $ Identifier name
 
 userVar :: Text -> Expr
 userVar = VarExpr
+
+not :: Expr -> Expr
+not = NotExpr
 
 and :: Expr -> Expr -> Expr
 and = AndExpr

@@ -19,6 +19,7 @@ data QueryExpr = QueryExpr
   , selectTerms :: [SelectTerm]
   , fromExpr :: [TableRef]
   , where_ :: Maybe Expr
+  , having :: Maybe Expr
   , ordering :: [OrderTerm]
   , limit :: Maybe LimitExpr
   }
@@ -112,6 +113,7 @@ data Literal
   = TextLit Text
   | IntLit Int
   | FloatLit Float
+  | NullLit
 
 data Identifier
   = Identifier Text

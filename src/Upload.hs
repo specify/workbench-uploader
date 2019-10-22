@@ -7,11 +7,11 @@ import Control.Monad (forM_)
 import Control.Newtype.Generics (unpack)
 
 import SQL (Statement(..), Alias, Alias, TableRef, Alias, Alias, Expr, QueryExpr, Script(..))
-import SQLSmart (startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, notInSubQuery, suchThat, row, (<=>), userVar, subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit)
+import SQLSmart (startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, notInSubQuery, suchThat, row, (<=>), userVar, subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null)
 import qualified UploadPlan as UP
 import UploadPlan (UploadPlan(..), columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..))
 
-import Prelude (Show, foldl, fmap, Int, (<>), (.), zip, Maybe(..), ($))
+import Prelude (const, Show, foldl, fmap, Int, (<>), (.), zip, Maybe(..), ($))
 import qualified Prelude
 
 show :: forall a. Show a => a -> Text
@@ -321,6 +321,8 @@ rowsFromWB wbId mappingItems excludeRows =
   [ ifoldl joinWBCell (table "workbenchrow" `as` r) mappingItems ]
   `suchThat`
   (((r @@ "workbenchid") `equal` wbId) `and` ((r @@ "workbenchrowid") `notInSubQuery` excludeRows))
+  `having`
+  (not $ (row $ fmap (\i -> project $ selectFromWBas i) mappingItems) <=> (row $ fmap (const null) mappingItems))
   where
     r = alias "r"
     c i = alias $ "c" <> ( show i)
@@ -342,6 +344,8 @@ valuesFromWB wbId mappingItems excludeRows =
   (((r @@ "workbenchid") `equal` wbId) `and` ((r @@ "workbenchrowid") `notInSubQuery` excludeRows))
   `orderBy`
   (fmap (\i -> asc $ project $ selectFromWBas i) mappingItems )
+  `having`
+  (not $ (row $ fmap (\i -> project $ selectFromWBas i) mappingItems) <=> (row $ fmap (const null) mappingItems))
   where
     r = alias "r"
     c i = alias $ "c" <> ( show i)

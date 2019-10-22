@@ -43,7 +43,7 @@ renderAlias :: Alias -> Doc a
 renderAlias (Alias a) = pretty $ escapeIdentifier a
 
 renderQuery :: QueryExpr -> Doc a
-renderQuery (QueryExpr {selectType, selectTerms, fromExpr, where_, ordering}) = case selectTerms of
+renderQuery (QueryExpr {selectType, selectTerms, fromExpr, where_, having, ordering}) = case selectTerms of
   [] -> mempty
   _ -> group (
     group $ renderSelectType selectType
@@ -51,6 +51,7 @@ renderQuery (QueryExpr {selectType, selectTerms, fromExpr, where_, ordering}) = 
     )
     <> renderFrom fromExpr
     <> renderWhere where_
+    <> renderHaving having
     <> renderOrderBy ordering
   -- renderLimit q.limit
 
@@ -64,6 +65,10 @@ renderOrderBy terms = line <> "order by" <+> (hsep $ punctuate comma $ fmap rend
   where
     renderOrderTerm (Ascending x) = renderExpr x <+> "asc"
     renderOrderTerm (Descending x) = renderExpr x <+> "desc"
+
+renderHaving :: Maybe Expr -> Doc a
+renderHaving Nothing = mempty
+renderHaving (Just x) = line <> "having" <+> renderExpr x
 
 renderSelectType :: SelectType -> Doc a
 renderSelectType SelectAll = "select"
@@ -176,6 +181,7 @@ renderCompOp L_Op =  "<"
 renderCompOp NE_Op =  "<>"
 
 renderLiteral :: Literal -> Doc a
+renderLiteral NullLit = "null"
 renderLiteral (IntLit i) = pretty i
 renderLiteral (FloatLit n) = pretty n
 renderLiteral (TextLit s) = squotes $ pretty $ escapeText s
