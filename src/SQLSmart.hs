@@ -155,3 +155,12 @@ starFrom = StarFrom
 
 alias :: Text -> Alias
 alias = Alias
+
+startTransaction :: Statement
+startTransaction = StartTransaction
+
+commit :: Statement
+commit = Commit
+
+rollback :: Statement
+rollback = RollBack

@@ -1,6 +1,8 @@
 module UploadPlan where
 
 import Data.Text (Text)
+import GHC.Generics
+import Control.Newtype.Generics (Newtype)
 
 data ColumnType = StringType
                 | DoubleType
@@ -8,8 +10,11 @@ data ColumnType = StringType
                 | DecimalType
                 | DateType Text
 
-newtype WorkbenchId = WorkbenchId Int
-newtype TemplateId = TemplateId Int
+newtype WorkbenchId = WorkbenchId Int deriving (Generic)
+instance Newtype WorkbenchId
+
+newtype TemplateId = TemplateId Int deriving (Generic)
+instance Newtype TemplateId
 
 data UploadPlan = UploadPlan
   { workbenchId :: WorkbenchId

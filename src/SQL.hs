@@ -8,6 +8,9 @@ data Statement
   = QueryStatement QueryExpr
   | InsertValues { tableName :: TableName , columns :: [ColumnName] , values :: [[Expr]] }
   | InsertFrom  { tableName :: TableName , columns :: [ColumnName] , queryExpr :: QueryExpr }
+  | StartTransaction
+  | Commit
+  | RollBack
   | SetUserVar Text Expr
 
 

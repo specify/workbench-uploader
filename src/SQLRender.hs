@@ -15,9 +15,12 @@ renderSQL :: Doc a -> Text
 renderSQL = renderStrict . layoutPretty defaultLayoutOptions
 
 renderScript :: Script -> Doc a
-renderScript (Script statements) = vsep $ fmap renderStatement statements
+renderScript (Script statements) = vsep $ fmap ((<>) line . renderStatement) statements
 
 renderStatement :: Statement -> Doc a
+renderStatement Commit = "commit;"
+renderStatement RollBack = "rollback;"
+renderStatement StartTransaction = "start transaction;"
 renderStatement (QueryStatement q) = renderQuery q <> ";"
 renderStatement (SetUserVar n v) = "set" <+> "@" <> (pretty $ escapeIdentifier n) <+> "=" <+> renderExpr v <> ";"
 renderStatement (InsertValues {tableName, columns, values}) =
@@ -156,7 +159,7 @@ renderExpr (RowExpr values) = parens $ hsep $ punctuate comma $ fmap renderExpr 
 renderExpr (SubQueryExpr (SubQuery {subquery, alias})) = renderSubQuery subquery <+> "as" <+> renderAlias alias
 renderExpr p@(Exists _) = notImplemented p
 renderExpr (RawExpr s) = parens $ pretty s
-renderExpr (Assignment s x) = parens $ pretty s <+> ":=" <+> renderExpr x
+renderExpr (Assignment s x) = parens $ "@" <> (pretty $ escapeIdentifier s) <+> ":=" <+> renderExpr x
 
 renderBinOp :: BinOp -> Doc a
 renderBinOp AndOp =  "&"
