@@ -20,6 +20,7 @@ data QueryExpr = QueryExpr
   , fromExpr :: [TableRef]
   , where_ :: Maybe Expr
   , having :: Maybe Expr
+  , grouping :: [Expr]
   , ordering :: [OrderTerm]
   , limit :: Maybe LimitExpr
   }
@@ -103,7 +104,7 @@ data Expr
   | VarExpr Text
   | UnaryOp UnaryOp Expr
   | RowExpr ([Expr])
-  | SubQueryExpr SubQuery
+  | SubQueryExpr QueryExpr
   | Exists SubQuery
   -- | IntervalExpr IntervalExpr
   | RawExpr Text

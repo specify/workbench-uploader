@@ -7,7 +7,7 @@ import Control.Monad (forM_)
 import Control.Newtype.Generics (unpack)
 
 import SQL (Statement(..), Alias, Alias, TableRef, Alias, Alias, Expr, QueryExpr, Script(..))
-import SQLSmart (startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, notInSubQuery, suchThat, row, (<=>), userVar, subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null)
+import SQLSmart (scalarSubQuery, startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, notInSubQuery, suchThat, row, (<=>), userVar, subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null, groupBy, max)
 import qualified UploadPlan as UP
 import UploadPlan (UploadPlan(..), columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..))
 
@@ -43,7 +43,6 @@ upload (UploadPlan {templateId, workbenchId, uploadTable}) = Script $ execWriter
   tell [setUserVar "workbenchid" $ intLit $ unpack workbenchId]
   insertIdFields uploadTable
   handleUpload uploadTable
-  tell [rollback]
 
 remark :: Text -> Statement
 remark message = QueryStatement $ query [selectAs "Message" $ stringLit message]
@@ -51,9 +50,18 @@ remark message = QueryStatement $ query [selectAs "Message" $ stringLit message]
 insertIdFields :: UploadTable -> Writer [Statement] ()
 insertIdFields ut@(UploadTable {tableName, idColumn}) = do
   tell [remark $ "Inserting an id field for the base table."]
+
   tell [
-    insertValues "workbenchtemplatemappingitem" ["timestampcreated", "workbenchtemplateid", "fieldname", "tablename"]
-      [[rawExpr "now()", userVar "templateid", stringLit idColumn, stringLit tableName]]
+    insertFrom "workbenchtemplatemappingitem"
+      ["timestampcreated", "workbenchtemplateid", "fieldname", "tablename", "vieworder", "caption", "metadata"] $
+      query [ select $ rawExpr "now()"
+            , select $ userVar "templateid"
+            , select $ stringLit idColumn
+            , select $ stringLit tableName
+            , select $ (max $ project "vieworder") `plus` intLit 1
+            , select $ stringLit $ idColumn
+            , select $ stringLit $ "generated"
+            ] `from` [table "workbenchtemplatemappingitem"]
     ]
   tell [setUserVar idColumn $ rawExpr "last_insert_id()"]
 
@@ -67,8 +75,16 @@ insertIdFieldsFromToOnes (UploadTable {tableName, toOneTables}) = do
     tell [remark $ "Inserting an id field for the " <> tableName <> " to " <> toOneTableName <> " foreign key."]
 
     tell [
-      insertValues "workbenchtemplatemappingitem" ["timestampcreated", "workbenchtemplateid", "fieldname", "tablename"]
-        [[rawExpr "now()", userVar "templateid", stringLit toOneFK, stringLit tableName]]
+      insertFrom "workbenchtemplatemappingitem"
+        ["timestampcreated", "workbenchtemplateid", "fieldname", "tablename", "vieworder", "caption", "metadata"] $
+        query [ select $ rawExpr "now()"
+              , select $ userVar "templateid"
+              , select $ stringLit toOneFK
+              , select $ stringLit tableName
+              , select $ (max $ project "vieworder") `plus` intLit 1
+              , select $ stringLit $ toOneIdColumnVar tableName toOneFK
+              , select $ stringLit $ "generated"
+              ] `from` [table "workbenchtemplatemappingitem"]
       ]
     tell [setUserVar (toOneIdColumnVar tableName toOneFK) $ rawExpr "last_insert_id()"]
 
@@ -81,11 +97,19 @@ insertIdFieldsFromToManys (UploadTable {toManyTables}) = do
     forM_ (zip [0 ..] records) $ \(index, ToManyRecord {toOneTables}) ->
       forM_ toOneTables $ \(ToOne {toOneFK, toOneTable}) -> do
         let (UploadTable {tableName=toOneTableName}) = toOneTable
-
         tell [ remark $ "Inserting an id field for the " <> toManyTable <> show index <> " to " <> toOneTableName <> " foreign key."]
+
         tell [
-          insertValues "workbenchtemplatemappingitem" ["timestampcreated", "workbenchtemplateid", "fieldname", "tablename"]
-            [[rawExpr "now()", userVar "templateid", stringLit toOneFK, stringLit toManyTable]]
+          insertFrom "workbenchtemplatemappingitem"
+            ["timestampcreated", "workbenchtemplateid", "fieldname", "tablename", "vieworder", "caption", "metadata"] $
+            query [ select $ rawExpr "now()"
+                  , select $ userVar "templateid"
+                  , select $ stringLit toOneFK
+                  , select $ stringLit toManyTable
+                  , select $ (max $ project "vieworder") `plus` intLit 1
+                  , select $ stringLit $ toManyIdColumnVar toManyTable index toOneFK
+                  , select $ stringLit $ "generated"
+                  ] `from` [table "workbenchtemplatemappingitem"]
           ]
         tell [ setUserVar (toManyIdColumnVar toManyTable index toOneFK) $ rawExpr "last_insert_id()"]
 
@@ -227,12 +251,13 @@ findExistingRecords wbTemplateMappingItemId ut@(UploadTable {tableName, idColumn
   insertFrom "workbenchdataitem" ["workbenchrowid", "celldata", "rownumber", "workbenchtemplatemappingitemid"] $
   query
   [ selectAs "rowid" $ wb @@ "workbenchrowid"
-  , selectAs "id" $ t @@ idColumn
-  , select $ wb @@ "rownumber"
-  , select $ wbTemplateMappingItemId
+  , selectAs "ids" $ rawExpr $ "group_concat(t." <> idColumn <> ")"--t @@ idColumn
+  , selectAs "rownumber" $ wb @@ "rownumber"
+  , selectAs "wbtmid" $ wbTemplateMappingItemId
   ] `from`
   [ ( joinToManys t ut (table tableName `as` t) ) `join` wbSubQuery `on` (valuesFromWB <=> valuesFromTable)]
   `st` strategyToWhereClause strategy t
+  `groupBy` [project "rowid", project "rownumber", project "wbtmid"]
   where
     t = alias "t"
     wb = alias "wb"

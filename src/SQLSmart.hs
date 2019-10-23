@@ -22,6 +22,7 @@ query terms =
             , fromExpr = [TableFactor Dual]
             , where_ = Nothing
             , SQL.having = Nothing
+            , grouping = []
             , ordering = []
             , limit = Nothing
             }
@@ -81,6 +82,9 @@ suchThat q expr = q { where_ = Just expr }
 having :: QueryExpr -> Expr -> QueryExpr
 having q expr = q { SQL.having = Just expr }
 
+groupBy :: QueryExpr -> [Expr] -> QueryExpr
+groupBy q exprs = q { grouping = exprs }
+
 orderBy :: QueryExpr -> [OrderTerm] -> QueryExpr
 orderBy q terms = q { ordering = terms }
 
@@ -132,6 +136,9 @@ nullIf x y = FCallExpr $ FCall {fname = "nullif", args = [x, y]}
 strToDate :: Expr -> Expr -> Expr
 strToDate format value = FCallExpr $ FCall {fname = "strtodate", args = [format, value]}
 
+max :: Expr -> Expr
+max x = FCallExpr $ FCall {fname = "max", args = [x]}
+
 plus :: Expr -> Expr -> Expr
 plus x y = BinOp PlusOp x y
 
@@ -140,6 +147,9 @@ notInSubQuery x sq = NotInPred x sq
 
 subqueryAs :: Alias -> QueryExpr -> TableRef
 subqueryAs as query = TableFactor $ Query $ SubQuery {subquery =  query, alias = as, exposedColumns = []}
+
+scalarSubQuery :: QueryExpr -> Expr
+scalarSubQuery = SubQueryExpr
 
 (<=>) :: Expr -> Expr -> Expr
 (<=>) = IsNotDistinctFrom

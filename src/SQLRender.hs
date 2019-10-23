@@ -43,7 +43,7 @@ renderAlias :: Alias -> Doc a
 renderAlias (Alias a) = pretty $ escapeIdentifier a
 
 renderQuery :: QueryExpr -> Doc a
-renderQuery (QueryExpr {selectType, selectTerms, fromExpr, where_, having, ordering}) = case selectTerms of
+renderQuery (QueryExpr {selectType, selectTerms, fromExpr, where_, having, grouping, ordering}) = case selectTerms of
   [] -> mempty
   _ -> group (
     group $ renderSelectType selectType
@@ -53,6 +53,7 @@ renderQuery (QueryExpr {selectType, selectTerms, fromExpr, where_, having, order
     <> renderWhere where_
     <> renderHaving having
     <> renderOrderBy ordering
+    <> renderGroupBy grouping
   -- renderLimit q.limit
 
 renderWhere :: Maybe Expr -> Doc a
@@ -69,6 +70,10 @@ renderOrderBy terms = line <> "order by" <+> (hsep $ punctuate comma $ fmap rend
 renderHaving :: Maybe Expr -> Doc a
 renderHaving Nothing = mempty
 renderHaving (Just x) = line <> "having" <+> renderExpr x
+
+renderGroupBy :: [Expr] -> Doc a
+renderGroupBy [] = mempty
+renderGroupBy exprs = line <> "group by" <+> (hsep $ punctuate comma $ fmap renderExpr exprs)
 
 renderSelectType :: SelectType -> Doc a
 renderSelectType SelectAll = "select"
@@ -161,7 +166,7 @@ renderExpr (FCallExpr (FCall {fname, args})) = pretty fname <> (parens $ hsep $ 
 renderExpr (VarExpr s) = pretty $ ("@" <> escapeIdentifier s)
 renderExpr p@(UnaryOp _ _) = notImplemented p
 renderExpr (RowExpr values) = parens $ hsep $ punctuate comma $ fmap renderExpr values
-renderExpr (SubQueryExpr (SubQuery {subquery, alias})) = renderSubQuery subquery <+> "as" <+> renderAlias alias
+renderExpr (SubQueryExpr q) = parens $ renderQuery q
 renderExpr p@(Exists _) = notImplemented p
 renderExpr (RawExpr s) = parens $ pretty s
 renderExpr (Assignment s x) = parens $ "@" <> (pretty $ escapeIdentifier s) <+> ":=" <+> renderExpr x
