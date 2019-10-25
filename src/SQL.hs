@@ -8,11 +8,13 @@ data Statement
   = QueryStatement QueryExpr
   | InsertValues { tableName :: TableName , columns :: [ColumnName] , values :: [[Expr]] }
   | InsertFrom  { tableName :: TableName , columns :: [ColumnName] , queryExpr :: QueryExpr }
+  | UpdateStatement UpdateStatement
   | StartTransaction
   | Commit
   | RollBack
   | SetUserVar Text Expr
 
+data UpdateStatement = Update { tables :: [TableRef], where_ :: Maybe Expr, set :: [(ColumnName, Expr)] }
 
 data QueryExpr = QueryExpr
   { selectType :: SelectType

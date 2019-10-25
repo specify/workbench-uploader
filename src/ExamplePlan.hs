@@ -5,8 +5,8 @@ import UploadPlan (TemplateId(..), WorkbenchId(..), MappingItem(..), UploadPlan(
 
 uploadPlan :: UploadPlan
 uploadPlan = UploadPlan
-  { workbenchId = WorkbenchId 31
-  , templateId = TemplateId 31
+  { workbenchId = WorkbenchId 25
+  , templateId = TemplateId 25
   , uploadTable = UploadTable
     { tableName = "collectingevent"
     , idColumn = "collectingeventid"

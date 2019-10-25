@@ -12,6 +12,13 @@ insertFrom :: Text -> [Text] -> QueryExpr -> Statement
 insertFrom tableName cols queryExpr =
   InsertFrom { tableName = TableName tableName, columns = map ColumnName cols, queryExpr = queryExpr}
 
+update :: [TableRef] -> [(Text, Expr)] -> UpdateStatement
+update tables set =
+  Update { tables = tables, where_ = Nothing, set = fmap (\(col, val) -> (ColumnName col, val)) set}
+
+when :: UpdateStatement -> Expr -> UpdateStatement
+when update when = update { where_ = Just when }
+
 distinct :: QueryExpr -> QueryExpr
 distinct q = q { selectType = SelectDistinct }
 
@@ -44,7 +51,7 @@ leftJoin :: TableRef -> TableRef -> TableRef
 leftJoin t u = JoinedTable $ LeftJoin t u (JoinOn $ intLit 0)
 
 on :: TableRef -> Expr -> TableRef
-on (JoinedTable jt) expr = JoinedTable $case jt of
+on (JoinedTable jt) expr = JoinedTable $ case jt of
   InnerJoin l r _ -> InnerJoin l r $ Just $ JoinOn expr
   LeftJoin l r _ ->  LeftJoin l r $ JoinOn expr
   RightJoin l r _ ->  RightJoin l r $ JoinOn expr
@@ -52,6 +59,14 @@ on (JoinedTable jt) expr = JoinedTable $case jt of
   NaturalRightJoin l r ->  NaturalRightJoin l r
 
 on tf _ = tf
+
+using :: TableRef -> [Text] -> TableRef
+using (JoinedTable jt) cols = JoinedTable $ case jt of
+  InnerJoin l r _ -> InnerJoin l r $ Just $ JoinUsing $ fmap ColumnName cols
+  LeftJoin l r _ ->  LeftJoin l r $ JoinUsing $ fmap ColumnName cols
+  RightJoin l r _ ->  RightJoin l r $ JoinUsing $ fmap ColumnName cols
+  NaturalLeftJoin l r -> NaturalLeftJoin l r
+  NaturalRightJoin l r ->  NaturalRightJoin l r
 
 table :: Text -> TableRef
 table name = TableFactor $ Table {name = TableName name, SQL.as = Nothing}
@@ -139,11 +154,20 @@ strToDate format value = FCallExpr $ FCall {fname = "strtodate", args = [format,
 max :: Expr -> Expr
 max x = FCallExpr $ FCall {fname = "max", args = [x]}
 
+locate :: Expr -> Expr -> Expr
+locate sub str = FCallExpr $ FCall {fname = "locate", args = [sub, str]}
+
 plus :: Expr -> Expr -> Expr
 plus x y = BinOp PlusOp x y
 
+inSubQuery :: Expr -> QueryExpr -> Expr
+inSubQuery = InPred
+
 notInSubQuery :: Expr -> QueryExpr -> Expr
-notInSubQuery x sq = NotInPred x sq
+notInSubQuery = NotInPred
+
+regexp :: Expr -> Expr -> Expr
+regexp = Regexp
 
 subqueryAs :: Alias -> QueryExpr -> TableRef
 subqueryAs as query = TableFactor $ Query $ SubQuery {subquery =  query, alias = as, exposedColumns = []}

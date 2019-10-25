@@ -7,7 +7,7 @@ import Control.Monad (forM_)
 import Control.Newtype.Generics (unpack)
 
 import SQL (Statement(..), Alias, Alias, TableRef, Alias, Alias, Expr, QueryExpr, Script(..))
-import SQLSmart (scalarSubQuery, startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, notInSubQuery, suchThat, row, (<=>), userVar, subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null, groupBy, max)
+import SQLSmart (using, locate, update, scalarSubQuery, startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, inSubQuery, notInSubQuery, suchThat, row, (<=>), userVar, subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null, groupBy, max, when)
 import qualified UploadPlan as UP
 import UploadPlan (UploadPlan(..), columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..))
 
@@ -41,11 +41,18 @@ upload (UploadPlan {templateId, workbenchId, uploadTable}) = Script $ execWriter
   tell [startTransaction]
   tell [setUserVar "templateid" $ intLit $ unpack templateId]
   tell [setUserVar "workbenchid" $ intLit $ unpack workbenchId]
+  tell [clearUploadStatus]
   insertIdFields uploadTable
   handleUpload uploadTable
+  tell [ QueryStatement $ showWB (userVar "workbenchid") ]
 
 remark :: Text -> Statement
 remark message = QueryStatement $ query [selectAs "Message" $ stringLit message]
+
+clearUploadStatus :: Statement
+clearUploadStatus = UpdateStatement $
+  update [table "workbenchrow"] [("uploadstatus", intLit 0)]
+  `when` (project "workbenchid" `equal` userVar "workbenchid")
 
 insertIdFields :: UploadTable -> Writer [Statement] ()
 insertIdFields ut@(UploadTable {tableName, idColumn}) = do
@@ -126,6 +133,9 @@ handleUpload uploadTable@(UploadTable {tableName}) = do
   tell [remark $ "Finding existing " <> tableName <> " records."]
   tell [findExistingRecords wbTemplateMappingItemId uploadTable]
 
+  tell [remark $ "Skipping degenerate records."]
+  tell [skipDegenerateRecords wbTemplateMappingItemId]
+
   tell [remark $ "Inserting new " <> tableName <> " records."]
   tell [insertNewRecords wbTemplateMappingItemId uploadTable]
 
@@ -150,6 +160,9 @@ handleToManyToOne toManyTable index (ToOne {toOneFK, toOneTable}) = do
   tell [remark $ "Finding existing " <> tableName <> " records for " <> toManyTable <> " " <> (show index) <> "."]
   tell [findExistingRecords wbTemplateMappingItemId toOneTable]
 
+  tell [remark $ "Skipping degenerate records."]
+  tell [skipDegenerateRecords wbTemplateMappingItemId]
+
   tell [remark $ "Inserting new " <> tableName <> " records for " <> toManyTable <> " " <> (show index) <> "."]
   tell [insertNewRecords wbTemplateMappingItemId toOneTable]
 
@@ -168,6 +181,9 @@ handleToOnes (UploadTable {tableName, toOneTables}) =
 
     tell [remark $ "Finding existing " <> toOneTableName <> " records."]
     tell [findExistingRecords wbTemplateMappingItemId toOneTable]
+
+    tell [remark $ "Skipping degenerate records."]
+    tell [skipDegenerateRecords wbTemplateMappingItemId]
 
     tell [remark $ "Inserting new " <> toOneTableName <> " records."]
     tell [insertNewRecords wbTemplateMappingItemId toOneTable]
@@ -189,7 +205,7 @@ rowsWithValuesFor workbenchtemplatemappingitemid =
     )
   ]
   where
-    r = alias "r"
+    r = alias "exclude"
     d = alias "d"
 
 
@@ -268,6 +284,20 @@ findExistingRecords wbTemplateMappingItemId ut@(UploadTable {tableName, idColumn
     wbSubQuery = subqueryAs wb $ rowsFromWB (userVar "workbenchid") mappingItems' excludeRows
     excludeRows = rowsWithValuesFor wbTemplateMappingItemId
 
+skipDegenerateRecords :: Expr -> Statement
+skipDegenerateRecords wbTemplateMappingItemId = UpdateStatement $
+  update
+  [(table "workbenchrow" `as` r) `join` (table "workbenchdataitem" `as` i)
+   `on` ( ((r @@ "workbenchrowid") `equal` (i @@ "workbenchrowid"))
+        `and` (i @@ "workbenchtemplatemappingitemid" `equal` wbTemplateMappingItemId)
+        `and` (locate (stringLit ",") $ i @@ "celldata" )
+        )
+  ]
+  [("uploadstatus", intLit 1)]
+  where
+    r = alias "r"
+    i = alias "i"
+
 strategyToWhereClause :: UploadStrategy -> Alias -> Maybe Expr
 strategyToWhereClause strategy t = case strategy of
   AlwaysCreate -> Nothing
@@ -345,7 +375,10 @@ rowsFromWB wbId mappingItems excludeRows =
   `from`
   [ ifoldl joinWBCell (table "workbenchrow" `as` r) mappingItems ]
   `suchThat`
-  (((r @@ "workbenchid") `equal` wbId) `and` ((r @@ "workbenchrowid") `notInSubQuery` excludeRows))
+  (((r @@ "workbenchid") `equal` wbId)
+   `and` (r @@ "uploadstatus" `equal` intLit 0)
+   `and` ((r @@ "workbenchrowid") `notInSubQuery` excludeRows)
+  )
   `having`
   (not $ (row $ fmap (\i -> project $ selectFromWBas i) mappingItems) <=> (row $ fmap (const null) mappingItems))
   where
@@ -366,7 +399,10 @@ valuesFromWB wbId mappingItems excludeRows =
   `from`
   [ ifoldl joinWBCell (table "workbenchrow" `as` r) mappingItems ]
   `suchThat`
-  (((r @@ "workbenchid") `equal` wbId) `and` ((r @@ "workbenchrowid") `notInSubQuery` excludeRows))
+  (((r @@ "workbenchid") `equal` wbId)
+   `and` (r @@ "uploadstatus" `equal` intLit 0)
+   `and` ((r @@ "workbenchrowid") `notInSubQuery` excludeRows)
+  )
   `orderBy`
   (fmap (\i -> asc $ project $ selectFromWBas i) mappingItems )
   `having`
@@ -383,7 +419,23 @@ valuesFromWB wbId mappingItems excludeRows =
         `and` (((c i) @@ "workbenchtemplatemappingitemid") `equal` (mappingId item))
       )
 
-
+showWB :: Expr -> QueryExpr
+showWB wbId =
+  query [select $ r @@ "uploadstatus", select $ rawExpr "group_concat(coalesce(json_quote(celldata), 'null') order by vieworder separator ' | ')"]
+  `from`
+  [(table "workbenchrow" `as` r)
+   `join` (table "workbench") `using` ["workbenchid"]
+   `join` (table "workbenchtemplatemappingitem" `as` m) `using` ["workbenchtemplateid"]
+   `leftJoin` (table "workbenchdataitem" `as` i) `using` ["workbenchrowid", "workbenchtemplatemappingitemid"]
+  ]
+  `suchThat`
+  (r @@ "workbenchid" `equal` wbId)
+  `groupBy` [r @@ "workbenchrowid"]
+  `orderBy` [asc $ r @@ "rownumber"]
+  where
+    r = alias "r"
+    i = alias "i"
+    m = alias "m"
 
 parseValue :: ColumnType -> Expr -> Expr
 parseValue StringType value = nullIf value (stringLit "")

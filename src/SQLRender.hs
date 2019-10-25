@@ -5,7 +5,7 @@ import Data.Text (Text)
 import Data.Text.Prettyprint.Doc (nest, indent, group, line, sep, (<+>), vsep, comma, hsep, punctuate, parens, squotes, pretty, defaultLayoutOptions, layoutPretty, Doc)
 import Data.Text.Prettyprint.Doc.Render.Text (renderStrict)
 
-import SQL (OrderTerm(..), JoinSpec(..), ColumnName(..), TableName(..), JoinedTable(..), TableFactor(..), TableRef(..), SelectTerm(..), SelectType(..), QueryExpr(..), SubQuery(..), FCall(..), Literal(..), BinOp(..), Expr(..), CompOp(..), Alias(..), Identifier(..), Statement(..), Script(..))
+import SQL (UpdateStatement(..), OrderTerm(..), JoinSpec(..), ColumnName(..), TableName(..), JoinedTable(..), TableFactor(..), TableRef(..), SelectTerm(..), SelectType(..), QueryExpr(..), SubQuery(..), FCall(..), Literal(..), BinOp(..), Expr(..), CompOp(..), Alias(..), Identifier(..), Statement(..), Script(..))
 
 
 notImplemented :: forall a b. a -> Doc b
@@ -38,6 +38,13 @@ renderStatement (InsertFrom {tableName, columns, queryExpr}) =
   , renderQuery queryExpr
   ] <> ";"
 
+renderStatement (UpdateStatement (Update {tables, where_, set})) =
+  group $ "update"
+  <> line <> (sep $ punctuate comma $ fmap renderTableRef tables)
+  <> line <> "set"
+  <> line <> (sep $ punctuate comma $ fmap (\(col, val) -> renderColumnName col <+> "=" <+> renderExpr val) set)
+  <> renderWhere where_
+  <> ";"
 
 renderAlias :: Alias -> Doc a
 renderAlias (Alias a) = pretty $ escapeIdentifier a
@@ -52,8 +59,8 @@ renderQuery (QueryExpr {selectType, selectTerms, fromExpr, where_, having, group
     <> renderFrom fromExpr
     <> renderWhere where_
     <> renderHaving having
-    <> renderOrderBy ordering
     <> renderGroupBy grouping
+    <> renderOrderBy ordering
   -- renderLimit q.limit
 
 renderWhere :: Maybe Expr -> Doc a
@@ -157,8 +164,8 @@ renderExpr p@(NotBetween _ _ _) = notImplemented p
 renderExpr p@(SoundsLike _ _) = notImplemented p
 renderExpr p@(Like _ _) = notImplemented p
 renderExpr p@(NotLike _ _) = notImplemented p
-renderExpr p@(Regexp _ _) = notImplemented p
-renderExpr p@(NotRegexp _ _) = notImplemented p
+renderExpr (Regexp x r) = parens $ renderExpr x <+> "regexp" <+> renderExpr r
+renderExpr (NotRegexp x r) = parens $ renderExpr x <+> "not regexp" <+> renderExpr r
 renderExpr (BinOp op x y) = parens $ renderExpr x <+> renderBinOp op <+> renderExpr y
 renderExpr (Literal l) = renderLiteral l
 renderExpr (IdentExpr i) = renderIdentifier i
