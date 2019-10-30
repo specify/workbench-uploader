@@ -28,26 +28,26 @@ uploadPlan = UploadPlan
         { toOneFK = "localityid"
         , toOneTable = UploadTable
           { tableName = "locality"
-                 , idColumn = "localityid"
-                 , strategy = MatchOrCreate [NamedValue {column = "disciplineid", value = "32768"}]
-                 , mappingItems =
-                   [ MappingItem {columnName = "text1", id = 1359, columnType = StringType}
-                   , MappingItem {columnName = "lat1text", id = 1340, columnType = StringType}
-                   , MappingItem {columnName = "localityName", id = 1358, columnType = StringType}
-                   , MappingItem {columnName = "long1text", id = 1338, columnType = StringType}
-                   , MappingItem {columnName = "maxElevation", id = 1357, columnType = DoubleType}
-                   , MappingItem {columnName = "minElevation", id = 1361, columnType = DoubleType}
-                   , MappingItem {columnName = "originalElevationUnit", id = 1348, columnType = StringType}
-                   ]
-                 , staticValues =
-                   [ NamedValue {column = "srclatlongunit", value = "0"}
-                   , NamedValue {column = "disciplineid", value = "32768"}
-                   , NamedValue {column = "timestampcreated", value = "now()"}
-                   , NamedValue {column = "guid", value = "uuid()" }
-                   ]
-                 , toOneTables = []
-                 , toManyTables = []
-                 }
+          , idColumn = "localityid"
+          , strategy = MatchOrCreate [NamedValue {column = "disciplineid", value = "32768"}]
+          , mappingItems =
+              [ MappingItem {columnName = "text1", id = 1359, columnType = StringType}
+              , MappingItem {columnName = "lat1text", id = 1340, columnType = StringType}
+              , MappingItem {columnName = "localityName", id = 1358, columnType = StringType}
+              , MappingItem {columnName = "long1text", id = 1338, columnType = StringType}
+              , MappingItem {columnName = "maxElevation", id = 1357, columnType = DoubleType}
+              , MappingItem {columnName = "minElevation", id = 1361, columnType = DoubleType}
+              , MappingItem {columnName = "originalElevationUnit", id = 1348, columnType = StringType}
+              ]
+          , staticValues =
+              [ NamedValue {column = "srclatlongunit", value = "0"}
+              , NamedValue {column = "disciplineid", value = "32768"}
+              , NamedValue {column = "timestampcreated", value = "now()"}
+              , NamedValue {column = "guid", value = "uuid()" }
+              ]
+          , toOneTables = []
+          , toManyTables = []
+          }
         }
       ]
     , toManyTables =
