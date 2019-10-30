@@ -1,12 +1,14 @@
 module SQLRender where
 
-import Prelude (Maybe(..), id, (.), ($), fmap, mempty, (<>))
-import Data.Text (Text)
+import Prelude (elem, Maybe(..), id, (.), ($), fmap, mempty, (<>))
+import Data.Text (toUpper, replace, Text)
 import Data.Text.Prettyprint.Doc (nest, indent, group, line, sep, (<+>), vsep, comma, hsep, punctuate, parens, squotes, pretty, defaultLayoutOptions, layoutPretty, Doc)
 import Data.Text.Prettyprint.Doc.Render.Text (renderStrict)
+import Data.Text.Encoding (encodeUtf8)
+import Text.Regex.PCRE.Light (match, dollar_endonly, compile, Regex)
 
 import SQL (UpdateStatement(..), OrderTerm(..), JoinSpec(..), ColumnName(..), TableName(..), JoinedTable(..), TableFactor(..), TableRef(..), SelectTerm(..), SelectType(..), QueryExpr(..), SubQuery(..), FCall(..), Literal(..), BinOp(..), Expr(..), CompOp(..), Alias(..), Identifier(..), Statement(..), Script(..))
-
+import SQLKeyword (keywords)
 
 notImplemented :: forall a b. a -> Doc b
 notImplemented _ =  "<not implemented>"
@@ -203,7 +205,15 @@ renderIdentifier (Identifier s) = pretty $ escapeIdentifier s
 renderIdentifier (Qualified (Alias a) s) = (pretty $ escapeIdentifier a) <> "." <> (pretty $ escapeIdentifier s)
 
 escapeText :: Text -> Text
-escapeText = id -- todo
+escapeText = replace "'" "''"
+
+identifierSafeRegex :: Regex
+identifierSafeRegex = compile "^[0-9,a-z,A-Z$_]*$" [dollar_endonly]
 
 escapeIdentifier :: Text -> Text
-escapeIdentifier = id -- todo
+escapeIdentifier i = case match identifierSafeRegex (encodeUtf8 i) [] of
+  Nothing -> quote i
+  _ | toUpper i `elem` keywords -> quote i
+  _ -> i
+  where
+    quote s = "`" <> replace "`" "``" s <> "`"
