@@ -3,7 +3,7 @@ version:             0.1.0.0
 -- synopsis:
 -- description:
 homepage:            https://github.com/githubuser/workbench-uploader#readme
-license:             GPL3
+license:             GPL-3
 license-file:        LICENSE
 author:              Specify Software Consortium
 maintainer:          anhalt@ku.edu
