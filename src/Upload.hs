@@ -1,4 +1,4 @@
-module Upload where
+module Upload (upload) where
 
 import Prelude (fmap, Int, (<>), zip, ($))
 
@@ -10,8 +10,8 @@ import Control.Newtype.Generics (unpack)
 import SQL (Statement(..), Expr, Script(..))
 import SQLSmart (using, locate, update, scalarSubQuery, startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, inSubQuery, notInSubQuery, suchThat, row, (<=>), userVar, subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null, groupBy, max, when)
 import UploadPlan (UploadPlan(..), columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..))
-import Common (toManyMappingItems, toOneMappingItems, valuesFromWB, rowsFromWB, showWB, rowsWithValuesFor, parseMappingItem, MappingItem(..))
-import MatchExistingRecords (matchExistingRecords)
+import Common (remark, toManyMappingItems, toOneMappingItems, valuesFromWB, rowsFromWB, showWB, rowsWithValuesFor, parseMappingItem, MappingItem(..))
+import MatchExistingRecords (skipDegenerateRecords, matchExistingRecords)
 
 upload :: UploadPlan -> Script
 upload (UploadPlan {templateId, workbenchId, uploadTable}) = Script $ execWriter $ do
@@ -21,7 +21,9 @@ upload (UploadPlan {templateId, workbenchId, uploadTable}) = Script $ execWriter
   tell [setUserVar "workbenchid" $ intLit $ unpack workbenchId]
   tell [clearUploadStatus]
   tell $ matchExistingRecords uploadTable
-  -- tell [ QueryStatement $ showWB (userVar "workbenchid") ]
+  tell [remark $ "Skipping degenerate records."]
+  tell [skipDegenerateRecords uploadTable]
+  tell [ QueryStatement $ showWB (userVar "workbenchid") ]
 
 clearUploadStatus :: Statement
 clearUploadStatus = UpdateStatement $
@@ -141,21 +143,4 @@ findNewRecords wbTemplateMappingItemId table@(UploadTable {tableName, idColumn, 
     newVals = row $ fmap (\(MappingItem {selectFromWBas}) -> valuesWithId @@ selectFromWBas) mappingItems'
     wbVals = row $ fmap (\(MappingItem {selectFromWBas}) -> wbRow @@ selectFromWBas) mappingItems'
     excludeRows = rowsWithValuesFor wbTemplateMappingItemId
-
-
-
-
-skipDegenerateRecords :: Expr -> Statement
-skipDegenerateRecords wbTemplateMappingItemId = UpdateStatement $
-  update
-  [(table "workbenchrow" `as` r) `join` (table "workbenchdataitem" `as` i)
-   `on` ( ((r @@ "workbenchrowid") `equal` (i @@ "workbenchrowid"))
-        `and` (i @@ "workbenchtemplatemappingitemid" `equal` wbTemplateMappingItemId)
-        `and` (locate (stringLit ",") $ i @@ "celldata" )
-        )
-  ]
-  [("uploadstatus", intLit 1)]
-  where
-    r = alias "r"
-    i = alias "i"
 

@@ -166,6 +166,12 @@ inSubQuery = InPred
 notInSubQuery :: Expr -> QueryExpr -> Expr
 notInSubQuery = NotInPred
 
+in_ :: Expr -> [Expr] -> Expr
+in_ = InExpr
+
+notIn_ :: Expr -> [Expr] -> Expr
+notIn_ = NotInExpr
+
 regexp :: Expr -> Expr -> Expr
 regexp = Regexp
 

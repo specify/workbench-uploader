@@ -1,4 +1,4 @@
-module MatchExistingRecords (matchExistingRecords) where
+module MatchExistingRecords (matchExistingRecords, skipDegenerateRecords) where
 
 import Prelude (fmap, Int, (<>), zip, Maybe(..), ($))
 
@@ -7,7 +7,7 @@ import Control.Monad.Writer (execWriter, tell, Writer)
 import Control.Monad (forM_)
 
 import SQL (Statement(..), Expr, QueryExpr)
-import SQLSmart (using, locate, update, scalarSubQuery, startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, inSubQuery, notInSubQuery, suchThat, row, (<=>), userVar, subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null, groupBy, max, when)
+import SQLSmart (in_, using, locate, update, scalarSubQuery, startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, inSubQuery, notInSubQuery, suchThat, row, (<=>), userVar, subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null, groupBy, max, when)
 import UploadPlan (UploadPlan(..), columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..))
 import Common (remark, rowsFromWB, joinToManys, toOneIdColumnVar, toManyIdColumnVar, toOneMappingItems, toManyMappingItems, strategyToWhereClause, parseMappingItem, MappingItem(..), show)
 
@@ -15,6 +15,34 @@ matchExistingRecords :: UploadTable -> [Statement]
 matchExistingRecords uploadTable = execWriter $ do
   insertIdFields uploadTable
   matchRecords uploadTable
+
+skipDegenerateRecords :: UploadTable -> Statement
+skipDegenerateRecords ut = UpdateStatement $
+  update
+  [(table "workbenchrow" `as` r) `join` (table "workbenchdataitem" `as` i)
+   `on` ( ((r @@ "workbenchrowid") `equal` (i @@ "workbenchrowid"))
+        `and` (i @@ "workbenchtemplatemappingitemid" `in_` (idFields ut))
+        `and` (locate (stringLit ",") $ i @@ "celldata" )
+        )
+  ]
+  [("uploadstatus", intLit 1)]
+  where
+    r = alias "r"
+    i = alias "i"
+
+idFields :: UploadTable -> [Expr]
+idFields ut@(UploadTable {idColumn}) =
+  [userVar idColumn] <> toOneIdFields ut <> toManyIdFields ut
+  where
+    toOneIdFields (UploadTable {tableName, toOneTables}) = do
+      (ToOne {toOneFK, toOneTable}) <- toOneTables
+      [userVar $ toOneIdColumnVar tableName toOneFK] <> toOneIdFields toOneTable <> toManyIdFields toOneTable
+
+    toManyIdFields (UploadTable {toManyTables}) = do
+      (ToMany {toManyTable, records}) <- toManyTables
+      (index, ToManyRecord {toOneTables}) <- zip [0 ..] records
+      (ToOne {toOneFK, toOneTable}) <- toOneTables
+      [userVar $ toManyIdColumnVar toManyTable index toOneFK] <> toOneIdFields toOneTable <> toManyIdFields toOneTable
 
 insertIdFields :: UploadTable -> Writer [Statement] ()
 insertIdFields ut@(UploadTable {tableName, idColumn}) = do

@@ -90,6 +90,8 @@ data Expr
   | CompAny CompOp Expr SubQuery
   | InPred Expr QueryExpr
   | NotInPred Expr QueryExpr
+  | InExpr Expr [Expr]
+  | NotInExpr Expr [Expr]
   | Between Expr Expr Expr
   | NotBetween Expr Expr Expr
   | SoundsLike Expr Expr

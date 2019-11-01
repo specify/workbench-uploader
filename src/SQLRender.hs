@@ -1,6 +1,6 @@
 module SQLRender where
 
-import Prelude (elem, Maybe(..), id, (.), ($), fmap, mempty, (<>))
+import Prelude (elem, Maybe(..), (.), ($), fmap, mempty, (<>))
 import Data.Text (toUpper, replace, Text)
 import Data.Text.Prettyprint.Doc (nest, indent, group, line, sep, (<+>), vsep, comma, hsep, punctuate, parens, squotes, pretty, defaultLayoutOptions, layoutPretty, Doc)
 import Data.Text.Prettyprint.Doc.Render.Text (renderStrict)
@@ -161,6 +161,8 @@ renderExpr p@(CompAll _ _ _) = notImplemented p
 renderExpr p@(CompAny _ _ _) = notImplemented p
 renderExpr (InPred x sq) = parens $ renderExpr x <+> "in" <+> renderSubQuery sq
 renderExpr (NotInPred x sq) = parens $ renderExpr x <+> "not in" <+> renderSubQuery sq
+renderExpr (InExpr x xs) = parens $ renderExpr x <+> "in" <+> (parens $ hsep $ punctuate comma $ fmap renderExpr xs)
+renderExpr (NotInExpr x xs) = parens $ renderExpr x <+> "not in" <+> (parens $ hsep $ punctuate comma $ fmap renderExpr xs)
 renderExpr p@(Between _ _ _) = notImplemented p
 renderExpr p@(NotBetween _ _ _) = notImplemented p
 renderExpr p@(SoundsLike _ _) = notImplemented p
