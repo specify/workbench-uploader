@@ -1,13 +1,11 @@
 module Main where
 
-import Prelude (fmap, ($), IO)
+import Prelude (($), IO)
 
 import Data.Text.IO (putStrLn)
-import SQLSmart (intLit, alias)
-import SQLRender (renderScript, renderQuery, renderSQL)
-import Upload (upload, findNewRecords, valuesFromWB, parseMappingItem, rowsFromWB, rowsWithValuesFor)
+import SQLRender (renderScript, renderSQL)
+import Upload (upload)
 import ExamplePlan (uploadPlan)
-import UploadPlan (UploadTable(..), mappingItems, uploadTable)
 import MatchRecords ()
 
 main :: IO ()
