@@ -270,36 +270,20 @@ findNewRecords wbTemplateMappingItemId table@(UploadTable {tableName, idColumn, 
     excludeRows = rowsWithValuesFor wbTemplateMappingItemId
 
 flagNewRecords :: Expr -> UploadTable -> [Statement]
-flagNewRecords wbTemplateMappingItemId table@(UploadTable {tableName, idColumn, strategy, mappingItems}) =
-  [ setUserVar "row_number" $ intLit 0
-  , setUserVar "new_id" $ intLit 1
-  , insertFrom "workbenchdataitem" ["workbenchrowid", "celldata", "rownumber", "workbenchtemplatemappingitemid"] $
+flagNewRecords wbTemplateMappingItemId ut@(UploadTable {mappingItems}) =
+  [ insertFrom "workbenchdataitem" ["workbenchrowid", "celldata", "rownumber", "workbenchtemplatemappingitemid"] $
     query
     [ select $ wbRow @@ "workbenchrowid"
-    , select $ rawExpr $ "concat('N', " <> idColumn <>")"
+    , select $ stringLit "new"
     , select $ wbRow @@ "rownumber"
     , select $ wbTemplateMappingItemId
     ] `from`
-    [ (subqueryAs wbRow $ rowsFromWB (userVar "workbenchid") mappingItems' excludeRows)
-      `join`
-      (subqueryAs valuesWithId $
-       query
-       [ selectAs idColumn $ (userVar "row_number") `plus` (userVar "new_id")
-       , select $ "row_number" @= ((userVar "row_number") `plus` (intLit 1))
-       , starFrom newValues
-       ] `from`
-       [ subqueryAs newValues $ valuesFromWB (userVar "workbenchid") mappingItems' excludeRows ]
-      ) `on` ( newVals <=> wbVals )
-    ]
+    [ subqueryAs wbRow $ rowsFromWB (userVar "workbenchid") mappingItems' excludeRows ]
   ]
   where
     t = alias "t"
     wbRow = alias "wbrow"
-    newValues = alias "newvalues"
-    valuesWithId = alias "valueswithid"
-    mappingItems' = fmap (parseMappingItem t) mappingItems <> toOneMappingItems table t <> toManyMappingItems table
-    newVals = row $ fmap (\(MappingItem {selectFromWBas}) -> valuesWithId @@ selectFromWBas) mappingItems'
-    wbVals = row $ fmap (\(MappingItem {selectFromWBas}) -> wbRow @@ selectFromWBas) mappingItems'
+    mappingItems' = fmap (parseMappingItem t) mappingItems <> toOneMappingItems ut t <> toManyMappingItems ut
     excludeRows = rowsWithValuesFor wbTemplateMappingItemId
 
 
