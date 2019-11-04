@@ -1,15 +1,15 @@
 module MatchExistingRecords (matchExistingRecords, skipDegenerateRecords) where
 
-import Prelude (fmap, Int, (<>), zip, Maybe(..), ($))
+import Prelude (fmap, Int, (<>), zip, ($))
 
 import Data.Text (Text)
 import Control.Monad.Writer (execWriter, tell, Writer)
 import Control.Monad (forM_)
 
-import SQL (Statement(..), Expr, QueryExpr)
+import SQL (Statement(..), Expr)
 import SQLSmart (in_, using, locate, update, scalarSubQuery, startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, inSubQuery, notInSubQuery, suchThat, row, (<=>), userVar, subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null, groupBy, max, when)
 import UploadPlan (UploadPlan(..), columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..))
-import Common (remark, rowsFromWB, joinToManys, toOneIdColumnVar, toManyIdColumnVar, toOneMappingItems, toManyMappingItems, strategyToWhereClause, parseMappingItem, MappingItem(..), show)
+import Common (maybeApply, rowsWithValuesFor, remark, rowsFromWB, joinToManys, toOneIdColumnVar, toManyIdColumnVar, toOneMappingItems, toManyMappingItems, strategyToWhereClause, parseMappingItem, MappingItem(..), show)
 
 matchExistingRecords :: UploadTable -> [Statement]
 matchExistingRecords uploadTable = execWriter $ do
@@ -161,29 +161,6 @@ matchToOnes (UploadTable {tableName, toOneTables}) =
 
     tell [remark $ "Flagging new records."]
     tell $ flagNewRecords wbTemplateMappingItemId toOneTable
-
-rowsWithValuesFor :: Expr -> QueryExpr
-rowsWithValuesFor workbenchtemplatemappingitemid =
-  query [select $ r @@ "workbenchrowid"]
-  `from`
-  [ table "workbenchrow" `as` r
-    `join` (table "workbenchdataitem" `as` d)
-    `on`
-    (((d @@ "workbenchrowid") `equal` (r @@ "workbenchrowid"))
-     `and`
-     ((d @@ "workbenchtemplatemappingitemid") `equal` workbenchtemplatemappingitemid)
-    )
-  ]
-  where
-    r = alias "exclude"
-    d = alias "d"
-
-
-maybeApply :: forall a b. (a -> b -> a) -> a -> Maybe b -> a
-maybeApply f a mb =
-  case mb of
-    Just b -> f a b
-    Nothing -> a
 
 flagNewRecords :: Expr -> UploadTable -> [Statement]
 flagNewRecords wbTemplateMappingItemId ut@(UploadTable {mappingItems}) =
