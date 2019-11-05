@@ -145,6 +145,9 @@ and = AndExpr
 equal :: Expr -> Expr -> Expr
 equal x y = CompOp E_Op x y
 
+notEqual :: Expr -> Expr -> Expr
+notEqual x y = CompOp NE_Op x y
+
 nullIf :: Expr -> Expr -> Expr
 nullIf x y = FCallExpr $ FCall {fname = "nullif", args = [x, y]}
 
@@ -156,6 +159,12 @@ max x = FCallExpr $ FCall {fname = "max", args = [x]}
 
 locate :: Expr -> Expr -> Expr
 locate sub str = FCallExpr $ FCall {fname = "locate", args = [sub, str]}
+
+concat :: [Expr] -> Expr
+concat xs = FCallExpr $ FCall {fname = "concat", args = xs}
+
+uuid :: Expr
+uuid = FCallExpr $ FCall {fname = "uuid", args = []}
 
 plus :: Expr -> Expr -> Expr
 plus x y = BinOp PlusOp x y
@@ -174,6 +183,9 @@ notIn_ = NotInExpr
 
 regexp :: Expr -> Expr -> Expr
 regexp = Regexp
+
+notLike :: Expr -> Expr -> Expr
+notLike = NotLike
 
 subqueryAs :: Alias -> QueryExpr -> TableRef
 subqueryAs as query = TableFactor $ Query $ SubQuery {subquery =  query, alias = as, exposedColumns = []}

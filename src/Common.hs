@@ -4,7 +4,7 @@ import Data.Text (pack, Text)
 import Data.List.Index (ifoldl, imap)
 
 import SQL (Statement(..), Alias, Alias, TableRef, Alias, Alias, Expr, QueryExpr)
-import SQLSmart (using, locate, update, scalarSubQuery, startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, inSubQuery, notInSubQuery, suchThat, row, (<=>), userVar, subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null, groupBy, max, when)
+import SQLSmart (notLike, notEqual, using, locate, update, scalarSubQuery, startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, inSubQuery, notInSubQuery, suchThat, row, (<=>), userVar, subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null, groupBy, max, when)
 import qualified UploadPlan as UP
 import UploadPlan (columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..))
 
@@ -47,6 +47,8 @@ rowsWithValuesFor workbenchtemplatemappingitemid =
     (((d @@ "workbenchrowid") `equal` (r @@ "workbenchrowid"))
      `and`
      ((d @@ "workbenchtemplatemappingitemid") `equal` workbenchtemplatemappingitemid)
+     `and`
+     (d @@ "celldata" `equal` stringLit "new")
     )
   ]
   where

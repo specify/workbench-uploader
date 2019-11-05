@@ -10,7 +10,7 @@ import Control.Newtype.Generics (unpack)
 import SQL (Statement(..), Expr, Script(..))
 import SQLSmart (using, locate, update, scalarSubQuery, startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, inSubQuery, notInSubQuery, suchThat, row, (<=>), userVar, subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null, groupBy, max, when)
 import UploadPlan (UploadPlan(..), columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..))
-import Common (remark, toManyMappingItems, toOneMappingItems, valuesFromWB, rowsFromWB, showWB, rowsWithValuesFor, parseMappingItem, MappingItem(..))
+import Common (toOneIdColumnVar, toManyIdColumnVar, remark, toManyMappingItems, toOneMappingItems, valuesFromWB, rowsFromWB, showWB, rowsWithValuesFor, parseMappingItem, MappingItem(..), show)
 import MatchExistingRecords (skipDegenerateRecords, matchExistingRecords)
 
 upload :: UploadPlan -> Script
@@ -23,6 +23,7 @@ upload (UploadPlan {templateId, workbenchId, uploadTable}) = Script $ execWriter
   tell $ matchExistingRecords uploadTable
   tell [remark $ "Skipping degenerate records."]
   tell [skipDegenerateRecords uploadTable]
+  handleUpload uploadTable
   tell [ QueryStatement $ showWB (userVar "workbenchid") ]
 
 clearUploadStatus :: Statement
@@ -35,17 +36,13 @@ handleUpload uploadTable@(UploadTable {tableName}) = do
   handleToOnes uploadTable
   handleToManys uploadTable
 
-  -- let wbTemplateMappingItemId = userVar $ idColumn uploadTable
+  let wbTemplateMappingItemId = userVar $ idColumn uploadTable
 
+  tell [remark $ "Inserting new " <> tableName <> " records."]
+  tell [insertNewRecords wbTemplateMappingItemId uploadTable]
 
-  -- tell [remark $ "Skipping degenerate records."]
-  -- tell [skipDegenerateRecords wbTemplateMappingItemId]
-
-  -- tell [remark $ "Inserting new " <> tableName <> " records."]
-  -- tell [insertNewRecords wbTemplateMappingItemId uploadTable]
-
-  -- tell [remark $ "Matching up newly created " <> tableName <> " records."]
-  -- tell $ findNewRecords wbTemplateMappingItemId uploadTable
+  tell [remark $ "Matching up newly created " <> tableName <> " records."]
+  tell $ findNewRecords wbTemplateMappingItemId uploadTable
 
 
 handleToManys :: UploadTable -> Writer [Statement] ()
@@ -59,17 +56,14 @@ handleToManyToOne toManyTable index (ToOne {toOneFK, toOneTable}) = do
   handleToOnes toOneTable
   handleToManys toOneTable
 
-  -- let wbTemplateMappingItemId = userVar $ toManyIdColumnVar toManyTable index toOneFK
-  -- let (UploadTable {tableName}) = toOneTable
+  let wbTemplateMappingItemId = userVar $ toManyIdColumnVar toManyTable index toOneFK
+  let (UploadTable {tableName}) = toOneTable
 
-  -- tell [remark $ "Skipping degenerate records."]
-  -- tell [skipDegenerateRecords wbTemplateMappingItemId]
+  tell [remark $ "Inserting new " <> tableName <> " records for " <> toManyTable <> " " <> (show index) <> "."]
+  tell [insertNewRecords wbTemplateMappingItemId toOneTable]
 
-  -- tell [remark $ "Inserting new " <> tableName <> " records for " <> toManyTable <> " " <> (show index) <> "."]
-  -- tell [insertNewRecords wbTemplateMappingItemId toOneTable]
-
-  -- tell [remark $ "Matching up newly created " <> tableName <> " records for " <> toManyTable <> " " <> (show index) <> "."]
-  -- tell $ findNewRecords wbTemplateMappingItemId toOneTable
+  tell [remark $ "Matching up newly created " <> tableName <> " records for " <> toManyTable <> " " <> (show index) <> "."]
+  tell $ findNewRecords wbTemplateMappingItemId toOneTable
 
 
 handleToOnes :: UploadTable -> Writer [Statement] ()
@@ -78,22 +72,14 @@ handleToOnes (UploadTable {tableName, toOneTables}) =
     handleToOnes toOneTable
     handleToManys toOneTable
 
-    -- let wbTemplateMappingItemId = userVar $ toOneIdColumnVar tableName toOneFK
-    -- let (UploadTable {tableName=toOneTableName}) = toOneTable
+    let wbTemplateMappingItemId = userVar $ toOneIdColumnVar tableName toOneFK
+    let (UploadTable {tableName=toOneTableName}) = toOneTable
 
-    -- tell [remark $ "Finding existing " <> toOneTableName <> " records."]
-    -- tell [findExistingRecords wbTemplateMappingItemId toOneTable]
+    tell [remark $ "Inserting new " <> toOneTableName <> " records."]
+    tell [insertNewRecords wbTemplateMappingItemId toOneTable]
 
-    -- tell [remark $ "Skipping degenerate records."]
-    -- tell [skipDegenerateRecords wbTemplateMappingItemId]
-
-    -- tell [remark $ "Flagging new records."]
-    -- tell $ flagNewRecords wbTemplateMappingItemId toOneTable
-    -- tell [remark $ "Inserting new " <> toOneTableName <> " records."]
-    -- tell [insertNewRecords wbTemplateMappingItemId toOneTable]
-
-    -- tell [remark $ "Matching up newly created " <> toOneTableName <> " records."]
-    -- tell $ findNewRecords wbTemplateMappingItemId toOneTable
+    tell [remark $ "Matching up newly created " <> toOneTableName <> " records."]
+    tell $ findNewRecords wbTemplateMappingItemId toOneTable
 
 
 
@@ -112,17 +98,13 @@ insertNewRecords wbTemplateMappingItemId ut@(UploadTable {tableName, staticValue
     excludeRows = rowsWithValuesFor wbTemplateMappingItemId
 
 findNewRecords :: Expr -> UploadTable -> [Statement]
-findNewRecords wbTemplateMappingItemId table@(UploadTable {tableName, idColumn, strategy, mappingItems}) =
+findNewRecords wbTemplateMappingItemId ut@(UploadTable {idColumn, mappingItems}) =
   [ setUserVar "new_id" $ rawExpr "last_insert_id()"
   , setUserVar "row_number" $ intLit 0
-  , insertFrom "workbenchdataitem" ["workbenchrowid", "celldata", "rownumber", "workbenchtemplatemappingitemid"] $
-    query
-    [ select $ wbRow @@ "workbenchrowid"
-    , select $ valuesWithId @@ idColumn
-    , select $ wbRow @@ "rownumber"
-    , select $ wbTemplateMappingItemId
-    ] `from`
-    [ (subqueryAs wbRow $ rowsFromWB (userVar "workbenchid") mappingItems' excludeRows)
+  , UpdateStatement $ update
+    [ (table "workbenchdataitem")
+      `join`
+      (subqueryAs wbRow $ rowsFromWB (userVar "workbenchid") mappingItems' excludeRows) `using` ["workbenchrowid"]
       `join`
       (subqueryAs valuesWithId $
        query
@@ -133,13 +115,14 @@ findNewRecords wbTemplateMappingItemId table@(UploadTable {tableName, idColumn, 
        [ subqueryAs newValues $ valuesFromWB (userVar "workbenchid") mappingItems' excludeRows ]
       ) `on` ( newVals <=> wbVals )
     ]
+    [("celldata", valuesWithId @@ idColumn)]
   ]
   where
     t = alias "t"
     wbRow = alias "wbrow"
     newValues = alias "newvalues"
     valuesWithId = alias "valueswithid"
-    mappingItems' = fmap (parseMappingItem t) mappingItems <> toOneMappingItems table t <> toManyMappingItems table
+    mappingItems' = fmap (parseMappingItem t) mappingItems <> toOneMappingItems ut t <> toManyMappingItems ut
     newVals = row $ fmap (\(MappingItem {selectFromWBas}) -> valuesWithId @@ selectFromWBas) mappingItems'
     wbVals = row $ fmap (\(MappingItem {selectFromWBas}) -> wbRow @@ selectFromWBas) mappingItems'
     excludeRows = rowsWithValuesFor wbTemplateMappingItemId
