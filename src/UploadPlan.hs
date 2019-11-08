@@ -3,6 +3,7 @@ module UploadPlan where
 import Data.Text (Text)
 import GHC.Generics
 import Control.Newtype.Generics (Newtype)
+import Data.Aeson (ToJSON)
 
 data ColumnType
   = StringType
@@ -10,26 +11,36 @@ data ColumnType
   | IntType
   | DecimalType
   | DateType Text
-  deriving (Show, Eq)
+  deriving (Generic, Show, Eq)
+
+instance ToJSON ColumnType
 
 newtype WorkbenchId = WorkbenchId Int deriving (Generic, Show, Eq)
 instance Newtype WorkbenchId
+instance ToJSON WorkbenchId
 
 newtype TemplateId = TemplateId Int deriving (Generic, Show, Eq)
 instance Newtype TemplateId
+instance ToJSON TemplateId
 
 data UploadPlan = UploadPlan
   { workbenchId :: WorkbenchId
   , templateId :: TemplateId
   , uploadTable :: UploadTable
   }
-  deriving (Show)
+  deriving (Generic, Show)
+
+instance ToJSON UploadPlan
 
 data NamedValue = NamedValue { column :: Text, value :: Text }
-  deriving (Show)
+  deriving (Generic, Show)
+
+instance ToJSON NamedValue
 
 data MappingItem = MappingItem {columnName :: Text, columnType :: ColumnType, id :: Int}
-  deriving (Show)
+  deriving (Generic, Show)
+
+instance ToJSON MappingItem
 
 data UploadTable = UploadTable
   { tableName :: Text
@@ -40,19 +51,26 @@ data UploadTable = UploadTable
   , toOneTables :: [ToOne]
   , toManyTables :: [ToMany]
   }
-  deriving (Show)
+  deriving (Generic, Show)
+
+instance ToJSON UploadTable
 
 data UploadStrategy
   = AlwaysCreate
   | AlwaysMatch [NamedValue]
   | MatchOrCreate [NamedValue]
-  deriving (Show)
+  deriving (Generic, Show)
+instance ToJSON UploadStrategy
 
 data ToMany = ToMany { toManyFK :: Text, toManyTable :: Text, records :: [ToManyRecord] }
-  deriving (Show)
+  deriving (Generic, Show)
+
+instance ToJSON ToMany
 
 data ToOne = ToOne { toOneFK :: Text, toOneTable :: UploadTable }
-  deriving (Show)
+  deriving (Generic, Show)
+
+instance ToJSON ToOne
 
 data ToManyRecord = ToManyRecord
   { filters :: [NamedValue]
@@ -60,4 +78,6 @@ data ToManyRecord = ToManyRecord
   , toOneTables :: [ToOne]
   , mappingItems :: [MappingItem]
   }
-  deriving (Show)
+  deriving (Generic, Show)
+
+instance ToJSON ToManyRecord
