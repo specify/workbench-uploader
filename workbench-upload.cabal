@@ -17,10 +17,29 @@ executable workbench-upload
   hs-source-dirs:      src
   main-is:             Main.hs
   default-language:    Haskell2010
-  build-depends:       base >= 4.7 && < 5, text, ilist, mtl, prettyprinter, newtype-generics, pcre-light, aeson, aeson-pretty, bytestring
-  default-extensions:  DuplicateRecordFields, NamedFieldPuns, OverloadedStrings, RankNTypes, DeriveGeneric, GeneralizedNewtypeDeriving
   ghc-options:         -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  default-extensions:
+                     DuplicateRecordFields,
+                     NamedFieldPuns,
+                     OverloadedStrings,
+                     RankNTypes,
+                     DeriveGeneric,
+                     GeneralizedNewtypeDeriving,
+                     ScopedTypeVariables
+  build-depends:
+                base >= 4.7 && < 5,
+                text,
+                ilist,
+                mtl,
+                prettyprinter,
+                newtype-generics,
+                pcre-light,
+                aeson,
+                aeson-pretty,
+                bytestring,
+                mysql-simple
   other-modules:
+                AugmentPlan
                 Common
                 ExamplePlan
                 MatchExistingRecords

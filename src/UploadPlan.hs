@@ -9,6 +9,7 @@ data ColumnType
   = StringType
   | DoubleType
   | IntType
+  | IdType
   | DecimalType
   | DateType Text
   deriving (Generic, Show, Eq)

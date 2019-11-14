@@ -4,7 +4,42 @@ import Data.Text (pack, Text)
 import Data.List.Index (ifoldl, imap)
 
 import SQL (Statement(..), Alias, Alias, TableRef, Alias, Alias, Expr, QueryExpr)
-import SQLSmart (notLike, notEqual, using, locate, update, scalarSubQuery, startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, inSubQuery, notInSubQuery, suchThat, row, (<=>), userVar, subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null, groupBy, max, when)
+import SQLSmart
+ ( (<=>)
+ , (@@)
+ , alias
+ , and
+ , as
+ , asc
+ , equal
+ , floatLit
+ , from
+ , groupBy
+ , having
+ , intLit
+ , join
+ , leftJoin
+ , not
+ , notInSubQuery
+ , null
+ , nullIf
+ , on
+ , orderBy
+ , plus
+ , project
+ , query
+ , queryDistinct
+ , rawExpr
+ , row
+ , select
+ , selectAs
+ , strToDate
+ , stringLit
+ , suchThat
+ , table
+ , userVar
+ , using
+ )
 import qualified UploadPlan as UP
 import UploadPlan (columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..))
 
@@ -74,7 +109,7 @@ strategyToWhereClause strategy t = case strategy of
 
 toManyMappingItems :: UploadTable -> [MappingItem]
 toManyMappingItems (UploadTable {toManyTables}) = do
-  (ToMany {toManyFK, toManyTable, records}) <- toManyTables
+  (ToMany {toManyTable, records}) <- toManyTables
   mappingItems <- imap (toManyRecordMappingItems toManyTable) records
   mappingItems
 
@@ -85,7 +120,7 @@ toManyRecordMappingItems tableName index (ToManyRecord {mappingItems, toOneTable
 
 
 toManyToOneMappingItems :: Text -> Int -> ToOne -> MappingItem
-toManyToOneMappingItems tableName index (ToOne {toOneFK, toOneTable}) = MappingItem
+toManyToOneMappingItems tableName index (ToOne {toOneFK}) = MappingItem
    { selectFromWBas = tableName <> (show index) <> toOneFK
    , columnType = IntType
    , mappingId = userVar $ toManyIdColumnVar tableName index toOneFK
@@ -103,7 +138,7 @@ parseToManyMappingItem tableName index (UP.MappingItem {columnName, columnType, 
   }
 
 toOneMappingItems :: UploadTable -> Alias -> [MappingItem]
-toOneMappingItems (UploadTable {toOneTables, tableName}) t = fmap (\(ToOne {toOneFK, toOneTable}) -> MappingItem
+toOneMappingItems (UploadTable {toOneTables, tableName}) t = fmap (\(ToOne {toOneFK}) -> MappingItem
   { tableColumn = toOneFK
   , columnType = IntType
   , mappingId = userVar $ toOneIdColumnVar tableName toOneFK
@@ -206,5 +241,6 @@ parseValue :: ColumnType -> Expr -> Expr
 parseValue StringType value = nullIf value (stringLit "")
 parseValue DoubleType value = nullIf value (stringLit "") `plus` (floatLit 0.0)
 parseValue IntType value = nullIf value (stringLit "") `plus` (intLit 0)
+parseValue IdType value = nullIf value (stringLit "") `plus` (intLit 0)
 parseValue DecimalType value = nullIf value (stringLit "")
 parseValue (DateType format) value = strToDate value $ stringLit format
