@@ -1,8 +1,14 @@
 module Common where
 
-import Data.Text (pack, Text)
+import Data.String (fromString)
+import Data.Text (pack, unpack, Text)
 import Data.List.Index (ifoldl, imap)
+import Database.MySQL.Simple.QueryResults (QueryResults)
+import Database.MySQL.Simple (Connection)
+import qualified Database.MySQL.Simple as MySQL
+import Control.Monad (forM_)
 
+import SQLRender (renderQuery, renderSQL, renderStatement)
 import SQL (Statement(..), Alias, Alias, TableRef, Alias, Alias, Expr, QueryExpr)
 import SQLSmart
  ( (<=>)
@@ -43,8 +49,9 @@ import SQLSmart
 import qualified UploadPlan as UP
 import UploadPlan (columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..))
 
-import Prelude (const, Show, foldl, fmap, Int, (<>), (.), Maybe(..), ($))
+import Prelude (IO, const, Show, foldl, fmap, Int, (<>), (.), Maybe(..), ($))
 import qualified Prelude
+
 
 show :: forall a. Show a => a -> Text
 show = pack . Prelude.show
@@ -244,3 +251,13 @@ parseValue IntType value = nullIf value (stringLit "") `plus` (intLit 0)
 parseValue IdType value = nullIf value (stringLit "") `plus` (intLit 0)
 parseValue DecimalType value = nullIf value (stringLit "")
 parseValue (DateType format) value = strToDate value $ stringLit format
+
+
+execute :: Connection -> [Statement] -> IO ()
+execute conn statements =
+  forM_ statements $ \s -> MySQL.execute_ conn $ fromString $ unpack $ renderSQL $ renderStatement s
+
+
+runQuery :: (QueryResults r) => Connection -> QueryExpr -> IO [r]
+runQuery conn q = MySQL.query_ conn $ fromString $ unpack $ renderSQL $ renderQuery q
+

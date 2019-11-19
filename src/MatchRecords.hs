@@ -1,7 +1,8 @@
 module MatchRecords where
 
-import Prelude (Maybe, pure, ($), compare, (==), undefined, (<>))
-import Data.List as L
+import Prelude (Maybe(..), pure, ($), (==), undefined, (<>))
+import qualified Data.List as L
+import qualified Data.List.Extra as L
 import UploadPlan (MappingItem(..), UploadStrategy(..), ToManyRecord(..), ToMany(..), ToOne(..), UploadTable(..))
 
 
@@ -10,13 +11,18 @@ reconcileMappingItems mappingItemsSets = do
   mappingItems <- mappingItemsSets
   pure $ do
     column <- columns
-    pure $ find (\(MappingItem {columnName}) -> columnName == column) mappingItems
+    pure $ L.find (\(MappingItem {columnName}) -> columnName == column) mappingItems
   where
     columns = L.nub $ L.sort $ do
       mappingItems <- mappingItemsSets
       (MappingItem {columnName}) <- mappingItems
       pure $ columnName
 
+
+uploadGroups :: UploadTable -> [[UploadTable]]
+uploadGroups ut =
+  L.groupSortOn (\UploadTable {tableName, mappingItems} -> (tableName, L.length mappingItems))
+  $ leafTables ut
 
 leafTables :: UploadTable -> [UploadTable]
 leafTables uploadTable@(UploadTable {toOneTables, toManyTables}) =
@@ -37,6 +43,7 @@ leafTablesFromToManys toManys = do
     [] -> [ UploadTable
             { tableName = toManyTable
             , idColumn = undefined
+            , idMapping = Nothing
             , strategy = AlwaysCreate
             , mappingItems = mappingItems
             , staticValues = staticValues
@@ -45,3 +52,5 @@ leafTablesFromToManys toManys = do
             }
           ]
     _ -> leafTablesFromToOnes toOneTables
+
+

@@ -30,6 +30,7 @@ executable workbench-upload
                 base >= 4.7 && < 5,
                 text,
                 ilist,
+                extra,
                 mtl,
                 prettyprinter,
                 newtype-generics,

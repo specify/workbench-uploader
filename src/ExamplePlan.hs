@@ -10,6 +10,7 @@ uploadPlan = UploadPlan
   , uploadTable = UploadTable
     { tableName = "collectingevent"
     , idColumn = "collectingeventid"
+    , idMapping = Nothing
     , strategy = AlwaysCreate
     , mappingItems =
       [ MappingItem {columnName = "remarks", id = 1349, columnType = StringType}
@@ -29,6 +30,7 @@ uploadPlan = UploadPlan
         , toOneTable = UploadTable
           { tableName = "locality"
           , idColumn = "localityid"
+          , idMapping = Nothing
           , strategy = MatchOrCreate [NamedValue {column = "disciplineid", value = "32768"}]
           , mappingItems =
               [ MappingItem {columnName = "text1", id = 1359, columnType = StringType}
@@ -74,6 +76,7 @@ collectorRecord ordernumber mappingId = ToManyRecord
       , toOneTable = UploadTable
         { tableName = "agent"
         , idColumn = "agentid"
+        , idMapping = Nothing
         , strategy = MatchOrCreate [NamedValue {column = "divisionid", value = "2"}]
         , mappingItems = [MappingItem {columnName = "lastname", id = mappingId, columnType = StringType} ]
         , staticValues =
