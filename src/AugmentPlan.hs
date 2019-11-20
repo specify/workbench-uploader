@@ -11,7 +11,7 @@ import Database.MySQL.Simple (Connection)
 import SQL (Expr)
 import SQLSmart (max, query, rawExpr, select, table, from, stringLit, intLit, plus, project, insertFrom, userVar)
 import UploadPlan (TemplateId(..), UploadPlan(..), columnName, id, ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, ToManyRecord(..), ColumnType(..), MappingItem(..))
-import Common (show, toManyIdColumnVar, toOneIdColumnVar, execute, runQuery)
+import Common (show, execute, runQuery)
 
 
 augmentPlan :: Connection -> UploadPlan -> IO UploadPlan
@@ -19,20 +19,6 @@ augmentPlan conn up@(UploadPlan {uploadTable, templateId}) = do
   ut <- insertIdFields conn templateId uploadTable
   return up {uploadTable = ut}
 
-
-idFields :: UploadTable -> [Expr]
-idFields ut@(UploadTable {idColumn}) =
-  [userVar idColumn] <> toOneIdFields ut <> toManyIdFields ut
-  where
-    toOneIdFields (UploadTable {tableName, toOneTables}) = do
-      (ToOne {toOneFK, toOneTable}) <- toOneTables
-      [userVar $ toOneIdColumnVar tableName toOneFK] <> toOneIdFields toOneTable <> toManyIdFields toOneTable
-
-    toManyIdFields (UploadTable {toManyTables}) = do
-      (ToMany {toManyTable, records}) <- toManyTables
-      (index, ToManyRecord {toOneTables}) <- zip [0 ..] records
-      (ToOne {toOneFK, toOneTable}) <- toOneTables
-      [userVar $ toManyIdColumnVar toManyTable index toOneFK] <> toOneIdFields toOneTable <> toManyIdFields toOneTable
 
 insertIdFields :: Connection -> TemplateId -> UploadTable -> IO UploadTable
 insertIdFields conn templateId ut@(UploadTable {tableName, idColumn}) = do
@@ -70,7 +56,7 @@ insertIdFieldsFromToOnes conn templateId ut@(UploadTable {tableName, toOneTables
               , select $ stringLit toOneFK
               , select $ stringLit tableName
               , select $ (max $ project "vieworder") `plus` intLit 1
-              , select $ stringLit $ toOneIdColumnVar tableName toOneFK
+              , select $ stringLit $ tableName <> toOneFK
               , select $ stringLit $ "generated"
               ] `from` [table "workbenchtemplatemappingitem"]
       ]
@@ -99,7 +85,7 @@ insertIdFieldsFromToManys conn templateId ut@(UploadTable {toManyTables}) = do
                   , select $ stringLit toOneFK
                   , select $ stringLit toManyTable
                   , select $ (max $ project "vieworder") `plus` intLit 1
-                  , select $ stringLit $ toManyIdColumnVar toManyTable index toOneFK
+                  , select $ stringLit $ toManyTable <> (show index) <> toOneFK
                   , select $ stringLit $ "generated"
                   ] `from` [table "workbenchtemplatemappingitem"]
           ]

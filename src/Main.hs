@@ -12,13 +12,15 @@ import Data.Aeson.Encode.Pretty (encodePretty)
 import Data.ByteString.Lazy (toStrict, readFile, writeFile)
 import Database.MySQL.Simple (defaultConnectInfo, Connection, connect, ConnectInfo(..))
 
+import SQL (Script(..))
 import SQLRender (renderScript, renderSQL)
 import SQLSmart (intLit)
 import Upload (upload)
 import ExamplePlan (uploadPlan)
 import AugmentPlan (augmentPlan)
 import UploadPlan (WorkbenchId(..), UploadPlan(..))
-import Common (runQuery, showWB)
+import Common (execute, runQuery, showWB)
+import MatchExistingRecords (matchExistingRecords)
 
 main :: IO ()
 main = do
@@ -28,6 +30,7 @@ main = do
     ("print" : args') -> doPrint args'
     ("example" : _) -> printPlan uploadPlan
     ("augment" : args') -> doAugment args'
+    ("match" : args') -> doMatch args'
     _ -> fail "bad command"
 
 doPrint :: [String] -> IO ()
@@ -48,6 +51,19 @@ doAugment (inFile : outFile : _) = do
     Left err -> fail $ "couldn't parse json:" <> err
   writeFile outFile $ encodePretty augmented
 doAugment _ = fail "expected inFile and outFile"
+
+doMatch :: [String] -> IO ()
+doMatch (inFile : _) = do
+  conn <- connectTo "bishop"
+  decoded <- eitherDecode <$> readFile inFile
+  case decoded of
+    Right plan -> do
+      let script = matchExistingRecords plan
+      putStrLn $ renderSQL $ renderScript $ Script script
+      execute conn script
+    Left err -> fail $ "couldn't parse json:" <> err
+doMatch _ = fail "expected inFile"
+
 
 printPlan :: UploadPlan -> IO ()
 printPlan = putStrLn . decodeUtf8 . toStrict . encodePretty

@@ -1,6 +1,6 @@
 module Upload (upload) where
 
-import Prelude (fmap, Int, (<>), zip, ($))
+import Prelude (undefined, fmap, Int, (<>), zip, ($))
 
 import Data.Text (Text)
 import Control.Monad.Writer (execWriter, tell, Writer)
@@ -10,17 +10,21 @@ import Control.Newtype.Generics (unpack)
 import SQL (Statement(..), Expr, Script(..))
 import SQLSmart (using, locate, update, scalarSubQuery, startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, inSubQuery, notInSubQuery, suchThat, row, (<=>), userVar, subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null, groupBy, max, when)
 import UploadPlan (UploadPlan(..), columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..))
-import Common (toOneIdColumnVar, toManyIdColumnVar, remark, toManyMappingItems, toOneMappingItems, valuesFromWB, rowsFromWB, showWB, rowsWithValuesFor, parseMappingItem, MappingItem(..), show)
-import MatchExistingRecords (skipDegenerateRecords, matchExistingRecords)
+import Common (remark, toManyMappingItems, toOneMappingItems, valuesFromWB, rowsFromWB, showWB, rowsWithValuesFor, parseMappingItem, MappingItem(..), show)
+import MatchExistingRecords (matchExistingRecords)
+
+skipDegenerateRecords = undefined
+toManyIdColumnVar = undefined
+toOneIdColumnVar = undefined
 
 upload :: UploadPlan -> Script
-upload (UploadPlan {templateId, workbenchId, uploadTable}) = Script $ execWriter $ do
+upload up@(UploadPlan {templateId, workbenchId, uploadTable}) = Script $ execWriter $ do
   tell [rollback]
   tell [startTransaction]
   tell [setUserVar "templateid" $ intLit $ unpack templateId]
   tell [setUserVar "workbenchid" $ intLit $ unpack workbenchId]
   tell [clearUploadStatus]
-  tell $ matchExistingRecords uploadTable
+  tell $ matchExistingRecords up
   tell [remark $ "Skipping degenerate records."]
   tell [skipDegenerateRecords uploadTable]
   handleUpload uploadTable

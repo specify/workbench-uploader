@@ -1,193 +1,82 @@
-module MatchExistingRecords (matchExistingRecords, skipDegenerateRecords) where
+module MatchExistingRecords (matchExistingRecords) where
 
-import Prelude (fmap, Int, (<>), zip, ($))
+import Prelude ((<$>), fmap, Int, (<>), zip, ($))
 
 import Data.Text (Text)
+import Data.Maybe (fromMaybe)
 import Control.Monad.Writer (execWriter, tell, Writer)
 import Control.Monad (forM_)
 
 import SQL (Statement(..), Expr)
-import SQLSmart (in_, using, locate, update, scalarSubQuery, startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, inSubQuery, notInSubQuery, suchThat, row, (<=>), userVar, subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null, groupBy, max, when)
-import UploadPlan (UploadPlan(..), columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..))
-import Common (maybeApply, rowsWithValuesFor, remark, rowsFromWB, joinToManys, toOneIdColumnVar, toManyIdColumnVar, toOneMappingItems, toManyMappingItems, strategyToWhereClause, parseMappingItem, MappingItem(..), show)
+import SQLSmart (in_, using, locate, update, scalarSubQuery, startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, inSubQuery, notInSubQuery, suchThat, row, (<=>), subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null, groupBy, max, when)
+import UploadPlan (WorkbenchId(..), UploadPlan(..), columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..))
+import Common (maybeApply, rowsWithValuesFor, remark, rowsFromWB, joinToManys, toOneMappingItems, toManyMappingItems, strategyToWhereClause, parseMappingItem, MappingItem(..), show)
 
-matchExistingRecords :: UploadTable -> [Statement]
-matchExistingRecords uploadTable = execWriter $ do
-  insertIdFields uploadTable
-  matchRecords uploadTable
+matchExistingRecords :: UploadPlan -> [Statement]
+matchExistingRecords (UploadPlan {uploadTable, workbenchId}) = execWriter $ do
+  matchRecords workbenchId uploadTable
 
-skipDegenerateRecords :: UploadTable -> Statement
-skipDegenerateRecords ut = UpdateStatement $
-  update
-  [(table "workbenchrow" `as` r) `join` (table "workbenchdataitem" `as` i)
-   `on` ( ((r @@ "workbenchrowid") `equal` (i @@ "workbenchrowid"))
-        `and` (i @@ "workbenchtemplatemappingitemid" `in_` (idFields ut))
-        `and` (locate (stringLit ",") $ i @@ "celldata" )
-        )
-  ]
-  [("uploadstatus", intLit 1)]
-  where
-    r = alias "r"
-    i = alias "i"
+matchRecords :: WorkbenchId -> UploadTable -> Writer [Statement] ()
+matchRecords wbId uploadTable = do
+  matchToOnes wbId uploadTable
+  matchToManys wbId uploadTable
 
-idFields :: UploadTable -> [Expr]
-idFields ut@(UploadTable {idColumn}) =
-  [userVar idColumn] <> toOneIdFields ut <> toManyIdFields ut
-  where
-    toOneIdFields (UploadTable {tableName, toOneTables}) = do
-      (ToOne {toOneFK, toOneTable}) <- toOneTables
-      [userVar $ toOneIdColumnVar tableName toOneFK] <> toOneIdFields toOneTable <> toManyIdFields toOneTable
+  tell [findExistingRecords wbId uploadTable]
 
-    toManyIdFields (UploadTable {toManyTables}) = do
-      (ToMany {toManyTable, records}) <- toManyTables
-      (index, ToManyRecord {toOneTables}) <- zip [0 ..] records
-      (ToOne {toOneFK, toOneTable}) <- toOneTables
-      [userVar $ toManyIdColumnVar toManyTable index toOneFK] <> toOneIdFields toOneTable <> toManyIdFields toOneTable
-
-insertIdFields :: UploadTable -> Writer [Statement] ()
-insertIdFields ut@(UploadTable {tableName, idColumn}) = do
-  tell [remark $ "Inserting an id field for the base table."]
-
-  tell [
-    insertFrom "workbenchtemplatemappingitem"
-      ["timestampcreated", "workbenchtemplateid", "fieldname", "tablename", "vieworder", "caption", "metadata"] $
-      query [ select $ rawExpr "now()"
-            , select $ userVar "templateid"
-            , select $ stringLit idColumn
-            , select $ stringLit tableName
-            , select $ (max $ project "vieworder") `plus` intLit 1
-            , select $ stringLit $ idColumn
-            , select $ stringLit $ "generated"
-            ] `from` [table "workbenchtemplatemappingitem"]
-    ]
-  tell [setUserVar idColumn $ rawExpr "last_insert_id()"]
-
-  insertIdFieldsFromToOnes ut
-  insertIdFieldsFromToManys ut
-
-insertIdFieldsFromToOnes :: UploadTable -> Writer [Statement] ()
-insertIdFieldsFromToOnes (UploadTable {tableName, toOneTables}) = do
-  forM_ toOneTables $ \(ToOne {toOneFK, toOneTable}) -> do
-    let (UploadTable {tableName=toOneTableName}) = toOneTable
-    tell [remark $ "Inserting an id field for the " <> tableName <> " to " <> toOneTableName <> " foreign key."]
-
-    tell [
-      insertFrom "workbenchtemplatemappingitem"
-        ["timestampcreated", "workbenchtemplateid", "fieldname", "tablename", "vieworder", "caption", "metadata"] $
-        query [ select $ rawExpr "now()"
-              , select $ userVar "templateid"
-              , select $ stringLit toOneFK
-              , select $ stringLit tableName
-              , select $ (max $ project "vieworder") `plus` intLit 1
-              , select $ stringLit $ toOneIdColumnVar tableName toOneFK
-              , select $ stringLit $ "generated"
-              ] `from` [table "workbenchtemplatemappingitem"]
-      ]
-    tell [setUserVar (toOneIdColumnVar tableName toOneFK) $ rawExpr "last_insert_id()"]
-
-    insertIdFieldsFromToOnes toOneTable
-    insertIdFieldsFromToManys toOneTable
-
-insertIdFieldsFromToManys :: UploadTable -> Writer [Statement] ()
-insertIdFieldsFromToManys (UploadTable {toManyTables}) = do
-  forM_ toManyTables $ \(ToMany {toManyTable, records}) ->
-    forM_ (zip [0 ..] records) $ \(index, ToManyRecord {toOneTables}) ->
-      forM_ toOneTables $ \(ToOne {toOneFK, toOneTable}) -> do
-        let (UploadTable {tableName=toOneTableName}) = toOneTable
-        tell [ remark $ "Inserting an id field for the " <> toManyTable <> show index <> " to " <> toOneTableName <> " foreign key."]
-
-        tell [
-          insertFrom "workbenchtemplatemappingitem"
-            ["timestampcreated", "workbenchtemplateid", "fieldname", "tablename", "vieworder", "caption", "metadata"] $
-            query [ select $ rawExpr "now()"
-                  , select $ userVar "templateid"
-                  , select $ stringLit toOneFK
-                  , select $ stringLit toManyTable
-                  , select $ (max $ project "vieworder") `plus` intLit 1
-                  , select $ stringLit $ toManyIdColumnVar toManyTable index toOneFK
-                  , select $ stringLit $ "generated"
-                  ] `from` [table "workbenchtemplatemappingitem"]
-          ]
-        tell [ setUserVar (toManyIdColumnVar toManyTable index toOneFK) $ rawExpr "last_insert_id()"]
-
-        insertIdFieldsFromToOnes toOneTable
-        insertIdFieldsFromToManys toOneTable
-
-matchRecords :: UploadTable -> Writer [Statement] ()
-matchRecords uploadTable@(UploadTable {tableName}) = do
-  matchToOnes uploadTable
-  matchToManys uploadTable
-
-  let wbTemplateMappingItemId = userVar $ idColumn uploadTable
-
-  tell [remark $ "Finding existing " <> tableName <> " records."]
-  tell [findExistingRecords wbTemplateMappingItemId uploadTable]
-
-  tell [remark $ "Flagging new records."]
-  tell $ flagNewRecords wbTemplateMappingItemId uploadTable
+  tell $ flagNewRecords wbId uploadTable
 
 
-matchToManys :: UploadTable -> Writer [Statement] ()
-matchToManys ut = do
-  forM_ (toManyTables ut) $ \(ToMany {toManyTable, records}) ->
-    forM_ (zip [0 .. ] records) $ \(index, (ToManyRecord {toOneTables})) ->
-      forM_ toOneTables $ \toOne -> matchToManyToOne toManyTable index toOne
+matchToManys :: WorkbenchId -> UploadTable -> Writer [Statement] ()
+matchToManys wbId ut = do
+  forM_ (toManyTables ut) $ \(ToMany {records}) ->
+    forM_ records $ \(ToManyRecord {toOneTables}) ->
+      forM_ toOneTables $ \toOne -> matchToManyToOne wbId toOne
 
-matchToManyToOne :: Text -> Int -> ToOne -> Writer [Statement] ()
-matchToManyToOne toManyTable index (ToOne {toOneFK, toOneTable}) = do
-  matchToOnes toOneTable
-  matchToManys toOneTable
+matchToManyToOne :: WorkbenchId -> ToOne -> Writer [Statement] ()
+matchToManyToOne wbId (ToOne {toOneTable}) = do
+  matchToOnes wbId toOneTable
+  matchToManys wbId toOneTable
 
-  let wbTemplateMappingItemId = userVar $ toManyIdColumnVar toManyTable index toOneFK
-  let (UploadTable {tableName}) = toOneTable
+  tell [findExistingRecords wbId toOneTable]
 
-  tell [remark $ "Finding existing " <> tableName <> " records for " <> toManyTable <> " " <> (show index) <> "."]
-  tell [findExistingRecords wbTemplateMappingItemId toOneTable]
+  tell $ flagNewRecords wbId toOneTable
 
-  tell [remark $ "Flagging new records."]
-  tell $ flagNewRecords wbTemplateMappingItemId toOneTable
+matchToOnes :: WorkbenchId -> UploadTable -> Writer [Statement] ()
+matchToOnes wbId (UploadTable {toOneTables}) =
+  forM_ toOneTables $ \(ToOne {toOneTable}) -> do
+    matchToOnes wbId toOneTable
+    matchToManys wbId toOneTable
 
-matchToOnes :: UploadTable -> Writer [Statement] ()
-matchToOnes (UploadTable {tableName, toOneTables}) =
-  forM_ toOneTables $ \(ToOne {toOneFK, toOneTable}) -> do
-    matchToOnes toOneTable
-    matchToManys toOneTable
+    tell [findExistingRecords wbId toOneTable]
 
-    let wbTemplateMappingItemId = userVar $ toOneIdColumnVar tableName toOneFK
-    let (UploadTable {tableName=toOneTableName}) = toOneTable
+    tell $ flagNewRecords wbId toOneTable
 
-    tell [remark $ "Finding existing " <> toOneTableName <> " records."]
-    tell [findExistingRecords wbTemplateMappingItemId toOneTable]
-
-    tell [remark $ "Flagging new records."]
-    tell $ flagNewRecords wbTemplateMappingItemId toOneTable
-
-flagNewRecords :: Expr -> UploadTable -> [Statement]
-flagNewRecords wbTemplateMappingItemId ut@(UploadTable {mappingItems}) =
+flagNewRecords :: WorkbenchId -> UploadTable -> [Statement]
+flagNewRecords (WorkbenchId wbId) ut@(UploadTable {mappingItems, idMapping}) =
   [ insertFrom "workbenchdataitem" ["workbenchrowid", "celldata", "rownumber", "workbenchtemplatemappingitemid"] $
     query
     [ select $ wbRow @@ "workbenchrowid"
     , select $ stringLit "new"
     , select $ wbRow @@ "rownumber"
-    , select $ wbTemplateMappingItemId
+    , select $ fromMaybe null $ intLit <$> idMapping
     ] `from`
-    [ subqueryAs wbRow $ rowsFromWB (userVar "workbenchid") mappingItems' excludeRows ]
+    [ subqueryAs wbRow $ rowsFromWB (intLit wbId) mappingItems' excludeRows ]
   ]
   where
     t = alias "t"
     wbRow = alias "wbrow"
     mappingItems' = fmap (parseMappingItem t) mappingItems <> toOneMappingItems ut t <> toManyMappingItems ut
-    excludeRows = rowsWithValuesFor wbTemplateMappingItemId
+    excludeRows = rowsWithValuesFor $ fromMaybe null $ intLit <$> idMapping
 
 
-findExistingRecords :: Expr -> UploadTable -> Statement
-findExistingRecords wbTemplateMappingItemId ut@(UploadTable {tableName, idColumn, strategy, mappingItems}) =
+findExistingRecords :: WorkbenchId -> UploadTable -> Statement
+findExistingRecords (WorkbenchId wbId) ut@(UploadTable {tableName, idColumn, strategy, mappingItems, idMapping}) =
   insertFrom "workbenchdataitem" ["workbenchrowid", "celldata", "rownumber", "workbenchtemplatemappingitemid"] $
   query
   [ selectAs "rowid" $ wb @@ "workbenchrowid"
   , selectAs "ids" $ rawExpr $ "group_concat(t." <> idColumn <> ")"--t @@ idColumn
   , selectAs "rownumber" $ wb @@ "rownumber"
-  , selectAs "wbtmid" $ wbTemplateMappingItemId
+  , selectAs "wbtmid" $ fromMaybe null $ intLit <$> idMapping
   ] `from`
   [ ( joinToManys t ut (table tableName `as` t) ) `join` wbSubQuery `on` (valuesFromWB <=> valuesFromTable)]
   `st` strategyToWhereClause strategy t
@@ -199,6 +88,6 @@ findExistingRecords wbTemplateMappingItemId ut@(UploadTable {tableName, idColumn
     mappingItems' = fmap (parseMappingItem t) mappingItems <> toOneMappingItems ut t <> toManyMappingItems ut
     valuesFromWB = row $ fmap (\(MappingItem {selectFromWBas}) -> wb @@ selectFromWBas) mappingItems'
     valuesFromTable = row $ fmap (\(MappingItem {tableAlias, tableColumn}) -> tableAlias @@ tableColumn) mappingItems'
-    wbSubQuery = subqueryAs wb $ rowsFromWB (userVar "workbenchid") mappingItems' excludeRows
-    excludeRows = rowsWithValuesFor wbTemplateMappingItemId
+    wbSubQuery = subqueryAs wb $ rowsFromWB (intLit wbId) mappingItems' excludeRows
+    excludeRows = rowsWithValuesFor $ fromMaybe null $ intLit <$> idMapping
 

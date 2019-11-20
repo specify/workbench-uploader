@@ -3,6 +3,7 @@ module Common where
 import Data.String (fromString)
 import Data.Text (pack, unpack, Text)
 import Data.List.Index (ifoldl, imap)
+import Data.Maybe (fromMaybe)
 import Database.MySQL.Simple.QueryResults (QueryResults)
 import Database.MySQL.Simple (Connection)
 import qualified Database.MySQL.Simple as MySQL
@@ -43,13 +44,12 @@ import SQLSmart
  , stringLit
  , suchThat
  , table
- , userVar
  , using
  )
 import qualified UploadPlan as UP
 import UploadPlan (columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..))
 
-import Prelude (IO, const, Show, foldl, fmap, Int, (<>), (.), Maybe(..), ($))
+import Prelude ((<$>), IO, const, Show, foldl, fmap, Int, (<>), (.), Maybe(..), ($))
 import qualified Prelude
 
 
@@ -89,8 +89,6 @@ rowsWithValuesFor workbenchtemplatemappingitemid =
     (((d @@ "workbenchrowid") `equal` (r @@ "workbenchrowid"))
      `and`
      ((d @@ "workbenchtemplatemappingitemid") `equal` workbenchtemplatemappingitemid)
-     `and`
-     (d @@ "celldata" `equal` stringLit "new")
     )
   ]
   where
@@ -127,10 +125,10 @@ toManyRecordMappingItems tableName index (ToManyRecord {mappingItems, toOneTable
 
 
 toManyToOneMappingItems :: Text -> Int -> ToOne -> MappingItem
-toManyToOneMappingItems tableName index (ToOne {toOneFK}) = MappingItem
+toManyToOneMappingItems tableName index (ToOne {toOneFK, toOneTable}) = MappingItem
    { selectFromWBas = tableName <> (show index) <> toOneFK
    , columnType = IntType
-   , mappingId = userVar $ toManyIdColumnVar tableName index toOneFK
+   , mappingId = fromMaybe null $ intLit <$> idMapping toOneTable
    , tableAlias = alias $ tableName <> (show index)
    , tableColumn = toOneFK
    }
@@ -145,19 +143,19 @@ parseToManyMappingItem tableName index (UP.MappingItem {columnName, columnType, 
   }
 
 toOneMappingItems :: UploadTable -> Alias -> [MappingItem]
-toOneMappingItems (UploadTable {toOneTables, tableName}) t = fmap (\(ToOne {toOneFK}) -> MappingItem
+toOneMappingItems (UploadTable {toOneTables}) t = fmap (\(ToOne {toOneFK, toOneTable}) -> MappingItem
   { tableColumn = toOneFK
   , columnType = IntType
-  , mappingId = userVar $ toOneIdColumnVar tableName toOneFK
+  , mappingId = fromMaybe null $ intLit <$> idMapping toOneTable
   , tableAlias = t
   , selectFromWBas = toOneFK
   }) toOneTables
 
-toOneIdColumnVar :: Text -> Text -> Text
-toOneIdColumnVar tableName foreignKey = tableName <> "_" <> foreignKey
+-- toOneIdColumnVar :: Text -> Text -> Text
+-- toOneIdColumnVar tableName foreignKey = tableName <> "_" <> foreignKey
 
-toManyIdColumnVar :: Text -> Int -> Text -> Text
-toManyIdColumnVar tableName index foreignKey = tableName <> ( show index) <> "_" <> foreignKey
+-- toManyIdColumnVar :: Text -> Int -> Text -> Text
+-- toManyIdColumnVar tableName index foreignKey = tableName <> ( show index) <> "_" <> foreignKey
 
 joinToManys :: Alias -> UploadTable -> TableRef -> TableRef
 joinToManys t ut tr =
