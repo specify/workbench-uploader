@@ -8,7 +8,7 @@ import Control.Monad (forM_)
 import Control.Newtype.Generics (unpack)
 
 import SQL (Statement(..), Expr, Script(..))
-import SQLSmart (using, locate, update, scalarSubQuery, startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, inSubQuery, notInSubQuery, suchThat, row, (<=>), userVar, subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null, groupBy, max, when)
+import SQLSmart (using, locate, update, scalarSubQuery, startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, inSubQuery, notInSubQuery, suchThat, row, (<=>), userVar, subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null, groupBy, max)
 import UploadPlan (UploadPlan(..), columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..))
 import Common (remark, toManyMappingItems, toOneMappingItems, valuesFromWB, rowsFromWB, showWB, rowsWithValuesFor, parseMappingItem, MappingItem(..), show)
 import MatchExistingRecords (matchExistingRecords)
@@ -33,7 +33,7 @@ upload up@(UploadPlan {templateId, workbenchId, uploadTable}) = Script $ execWri
 clearUploadStatus :: Statement
 clearUploadStatus = UpdateStatement $
   update [table "workbenchrow"] [("uploadstatus", intLit 0)]
-  `when` (project "workbenchid" `equal` userVar "workbenchid")
+  `suchThat` (project "workbenchid" `equal` userVar "workbenchid")
 
 handleUpload :: UploadTable -> Writer [Statement] ()
 handleUpload uploadTable@(UploadTable {tableName}) = do

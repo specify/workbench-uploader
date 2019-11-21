@@ -234,7 +234,7 @@ showWB wbId =
    `leftJoin` (table "workbenchdataitem" `as` i) `using` ["workbenchrowid", "workbenchtemplatemappingitemid"]
   ]
   `suchThat`
-  (r @@ "workbenchid" `equal` wbId)
+  ((r @@ "workbenchid" `equal` wbId) `and` (r @@ "uploadstatus" `equal` (intLit 0)))
   `groupBy` [r @@ "workbenchrowid"]
   `orderBy` [asc $ r @@ "rownumber"]
   where

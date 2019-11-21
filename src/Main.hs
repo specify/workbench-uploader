@@ -20,7 +20,7 @@ import ExamplePlan (uploadPlan)
 import AugmentPlan (augmentPlan)
 import UploadPlan (WorkbenchId(..), UploadPlan(..))
 import Common (execute, runQuery, showWB)
-import MatchExistingRecords (matchExistingRecords)
+import MatchExistingRecords (matchExistingRecords, clean)
 
 main :: IO ()
 main = do
@@ -31,6 +31,7 @@ main = do
     ("example" : _) -> printPlan uploadPlan
     ("augment" : args') -> doAugment args'
     ("match" : args') -> doMatch args'
+    ("clean" : args') -> doClean args'
     _ -> fail "bad command"
 
 doPrint :: [String] -> IO ()
@@ -64,6 +65,17 @@ doMatch (inFile : _) = do
     Left err -> fail $ "couldn't parse json:" <> err
 doMatch _ = fail "expected inFile"
 
+doClean :: [String] -> IO ()
+doClean (inFile : _) = do
+  conn <- connectTo "bishop"
+  decoded <- eitherDecode <$> readFile inFile
+  case decoded of
+    Right plan -> do
+      let script = clean plan
+      putStrLn $ renderSQL $ renderScript $ Script script
+      execute conn script
+    Left err -> fail $ "couldn't parse json:" <> err
+doClean _ = fail "expected inFile"
 
 printPlan :: UploadPlan -> IO ()
 printPlan = putStrLn . decodeUtf8 . toStrict . encodePretty

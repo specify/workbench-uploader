@@ -4,6 +4,11 @@ import Data.Text (Text)
 import SQL hiding (as, having)
 import qualified SQL
 
+
+class Whereable a where
+  suchThat :: a -> Expr -> a
+
+
 insertValues :: Text -> [Text] -> [[Expr]] -> Statement
 insertValues tableName cols values =
   InsertValues { tableName = TableName tableName, columns = map ColumnName cols, values = values }
@@ -12,12 +17,18 @@ insertFrom :: Text -> [Text] -> QueryExpr -> Statement
 insertFrom tableName cols queryExpr =
   InsertFrom { tableName = TableName tableName, columns = map ColumnName cols, queryExpr = queryExpr}
 
+delete :: Text -> DeleteStatement
+delete tableName = Delete { tableName = TableName tableName, where_ = Nothing }
+
+instance Whereable DeleteStatement where
+  suchThat delete when = delete { where_ = Just when }
+
 update :: [TableRef] -> [(Text, Expr)] -> UpdateStatement
 update tables set =
   Update { tables = tables, where_ = Nothing, set = fmap (\(col, val) -> (ColumnName col, val)) set}
 
-when :: UpdateStatement -> Expr -> UpdateStatement
-when update when = update { where_ = Just when }
+instance Whereable UpdateStatement where
+  suchThat update when = update { where_ = Just when }
 
 distinct :: QueryExpr -> QueryExpr
 distinct q = q { selectType = SelectDistinct }
@@ -90,9 +101,8 @@ as t a = case t of
       NaturalLeftJoin l r -> NaturalLeftJoin l (r `as` a')
       NaturalRightJoin l r -> NaturalRightJoin l (r `as` a')
 
-
-suchThat :: QueryExpr -> Expr -> QueryExpr
-suchThat q expr = q { where_ = Just expr }
+instance Whereable QueryExpr where
+  suchThat q expr = q { where_ = Just expr }
 
 having :: QueryExpr -> Expr -> QueryExpr
 having q expr = q { SQL.having = Just expr }

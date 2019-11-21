@@ -7,7 +7,7 @@ import Data.Text.Prettyprint.Doc.Render.Text (renderStrict)
 import Data.Text.Encoding (encodeUtf8)
 import Text.Regex.PCRE.Light (match, dollar_endonly, compile, Regex)
 
-import SQL (UpdateStatement(..), OrderTerm(..), JoinSpec(..), ColumnName(..), TableName(..), JoinedTable(..), TableFactor(..), TableRef(..), SelectTerm(..), SelectType(..), QueryExpr(..), SubQuery(..), FCall(..), Literal(..), BinOp(..), Expr(..), CompOp(..), Alias(..), Identifier(..), Statement(..), Script(..))
+import SQL (UpdateStatement(..), DeleteStatement(..), OrderTerm(..), JoinSpec(..), ColumnName(..), TableName(..), JoinedTable(..), TableFactor(..), TableRef(..), SelectTerm(..), SelectType(..), QueryExpr(..), SubQuery(..), FCall(..), Literal(..), BinOp(..), Expr(..), CompOp(..), Alias(..), Identifier(..), Statement(..), Script(..))
 import SQLKeyword (keywords)
 
 notImplemented :: forall a b. a -> Doc b
@@ -45,6 +45,12 @@ renderStatement (UpdateStatement (Update {tables, where_, set})) =
   <> line <> (sep $ punctuate comma $ fmap renderTableRef tables)
   <> line <> "set"
   <> line <> (sep $ punctuate comma $ fmap (\(col, val) -> renderColumnName col <+> "=" <+> renderExpr val) set)
+  <> renderWhere where_
+  <> ";"
+
+renderStatement (DeleteStatement (Delete {tableName, where_})) =
+  group $ "delete from"
+  <> line <> renderTableName tableName
   <> renderWhere where_
   <> ";"
 

@@ -6,8 +6,9 @@ newtype Script = Script [Statement]
 
 data Statement
   = QueryStatement QueryExpr
-  | InsertValues { tableName :: TableName , columns :: [ColumnName] , values :: [[Expr]] }
-  | InsertFrom  { tableName :: TableName , columns :: [ColumnName] , queryExpr :: QueryExpr }
+  | InsertValues { tableName :: TableName, columns :: [ColumnName], values :: [[Expr]] }
+  | InsertFrom  { tableName :: TableName, columns :: [ColumnName], queryExpr :: QueryExpr }
+  | DeleteStatement DeleteStatement
   | UpdateStatement UpdateStatement
   | StartTransaction
   | Commit
@@ -15,6 +16,7 @@ data Statement
   | SetUserVar Text Expr
 
 data UpdateStatement = Update { tables :: [TableRef], where_ :: Maybe Expr, set :: [(ColumnName, Expr)] }
+data DeleteStatement = Delete  { tableName :: TableName, where_ :: Maybe Expr }
 
 data QueryExpr = QueryExpr
   { selectType :: SelectType
