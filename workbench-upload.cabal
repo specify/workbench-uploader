@@ -25,7 +25,8 @@ executable workbench-upload
                      RankNTypes,
                      DeriveGeneric,
                      GeneralizedNewtypeDeriving,
-                     ScopedTypeVariables
+                     ScopedTypeVariables,
+                     FlexibleInstances
   build-depends:
                 base >= 4.7 && < 5,
                 text,
@@ -49,5 +50,4 @@ executable workbench-upload
                 SQLKeyword
                 SQLRender
                 SQLSmart
-                Upload
                 UploadPlan

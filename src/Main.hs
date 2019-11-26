@@ -1,26 +1,49 @@
 module Main where
 
-import Prelude ((<>), Either(..), (<$>), String, undefined, Integer, (.), ($), IO, show, fail)
+import Prelude (pure, (<>), Either(..), (<$>), String, Integer, (.), ($), IO, fail)
 
 import System.Environment (getArgs)
 import Control.Monad (forM_)
-import Data.Text (Text, unpack, pack)
+import Control.Monad.Reader (runReaderT, lift, ask, ReaderT)
+import Data.String (fromString)
+import Data.Text (Text, unpack)
 import Data.Text.IO (putStrLn)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Aeson (eitherDecode)
 import Data.Aeson.Encode.Pretty (encodePretty)
 import Data.ByteString.Lazy (toStrict, readFile, writeFile)
 import Database.MySQL.Simple (defaultConnectInfo, Connection, connect, ConnectInfo(..))
+import qualified Database.MySQL.Simple as MySQL
 
-import SQL (Script(..))
-import SQLRender (renderScript, renderSQL)
+
+import SQL (MonadSQL(..))
+import SQLRender (renderQuery, renderStatement, renderSQL)
 import SQLSmart (intLit)
-import Upload (upload)
 import ExamplePlan (uploadPlan)
 import AugmentPlan (augmentPlan)
 import UploadPlan (WorkbenchId(..), UploadPlan(..))
-import Common (execute, runQuery, showWB)
+import Common (runQuery, showWB)
 import MatchExistingRecords (matchExistingRecords, clean)
+
+data Env = Env {conn :: Connection}
+
+type UploadMonad = ReaderT Env IO
+
+instance MonadSQL UploadMonad where
+  execute stmt = do
+    let sql = renderSQL $ renderStatement stmt
+    log sql
+    Env conn <- ask
+    _ <- lift $ MySQL.execute_ conn $ fromString $ unpack $ sql
+    pure ()
+
+  doQuery q = do
+    let sql = renderSQL $ renderQuery q
+    log sql
+    Env conn <- ask
+    lift $ MySQL.query_ conn $ fromString $ unpack $ sql
+
+  log = lift <$> putStrLn
 
 main :: IO ()
 main = do
@@ -34,6 +57,11 @@ main = do
     ("clean" : args') -> doClean args'
     _ -> fail "bad command"
 
+runDB :: String -> UploadMonad a -> IO a
+runDB dbName sql = do
+  conn <- connectTo dbName
+  runReaderT sql (Env conn)
+
 doPrint :: [String] -> IO ()
 doPrint (planFile : _) = do
   conn <- connectTo "bishop"
@@ -45,35 +73,27 @@ doPrint _ = fail "missing plan file"
 
 doAugment :: [String] -> IO ()
 doAugment (inFile : outFile : _) = do
-  conn <- connectTo "bishop"
   decoded <- eitherDecode <$> readFile inFile
   augmented <- case decoded of
-    Right plan -> augmentPlan conn plan
+    Right plan -> runDB "bishop" $ augmentPlan plan
     Left err -> fail $ "couldn't parse json:" <> err
   writeFile outFile $ encodePretty augmented
 doAugment _ = fail "expected inFile and outFile"
 
 doMatch :: [String] -> IO ()
 doMatch (inFile : _) = do
-  conn <- connectTo "bishop"
   decoded <- eitherDecode <$> readFile inFile
   case decoded of
-    Right plan -> do
-      let script = matchExistingRecords plan
-      putStrLn $ renderSQL $ renderScript $ Script script
-      execute conn script
+    Right plan -> runDB "bishop" $ matchExistingRecords plan
     Left err -> fail $ "couldn't parse json:" <> err
 doMatch _ = fail "expected inFile"
 
 doClean :: [String] -> IO ()
 doClean (inFile : _) = do
-  conn <- connectTo "bishop"
   decoded <- eitherDecode <$> readFile inFile
   case decoded of
     Right plan -> do
-      let script = clean plan
-      putStrLn $ renderSQL $ renderScript $ Script script
-      execute conn script
+      runDB "bishop" $ clean plan
     Left err -> fail $ "couldn't parse json:" <> err
 doClean _ = fail "expected inFile"
 

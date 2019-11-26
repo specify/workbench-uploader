@@ -1,25 +1,24 @@
 module MatchExistingRecords (matchExistingRecords, clean) where
 
-import Prelude (undefined, (<$>), fmap, (<>), ($))
+import Prelude ((<$>), fmap, (<>), ($))
 
 import Data.Maybe (fromMaybe)
-import Control.Monad.Writer (execWriter, tell, Writer)
 import Control.Monad (forM_)
 import Control.Newtype.Generics (unpack)
 
-import SQL (Statement(..))
+import SQL (MonadSQL, Statement(..), execute)
 import SQLSmart (in_, using, locate, update, scalarSubQuery, startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, inSubQuery, notInSubQuery, suchThat, row, (<=>), subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null, groupBy, max, delete)
 import UploadPlan (WorkbenchId(..), UploadPlan(..), columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..))
 import Common (maybeApply, rowsWithValuesFor, rowsFromWB, joinToManys, toOneMappingItems, toManyMappingItems, strategyToWhereClause, parseMappingItem, MappingItem(..))
 
 
-clean :: UploadPlan -> [Statement]
-clean (UploadPlan {workbenchId, templateId}) =
-  [ UpdateStatement $
+clean :: MonadSQL m => UploadPlan -> m ()
+clean (UploadPlan {workbenchId, templateId}) = do
+  execute $ UpdateStatement $
     update [table "workbenchrow"] [("uploadstatus", intLit 0)]
     `suchThat` (project "workbenchid" `equal` (intLit $ unpack workbenchId))
 
-  , DeleteStatement $
+  execute $ DeleteStatement $
     delete "workbenchdataitem"
     `suchThat`
     ( project "workbenchtemplatemappingitemid" `inSubQuery`
@@ -31,14 +30,12 @@ clean (UploadPlan {workbenchId, templateId}) =
           )
       )
     )
-  ]
 
-matchExistingRecords :: UploadPlan -> [Statement]
-matchExistingRecords (UploadPlan {uploadTable, workbenchId}) = execWriter $ do
-  matchRecords workbenchId uploadTable
+matchExistingRecords :: MonadSQL m => UploadPlan -> m ()
+matchExistingRecords (UploadPlan {uploadTable, workbenchId}) = matchRecords workbenchId uploadTable
 
-skipDegenerateRecords :: WorkbenchId -> Statement
-skipDegenerateRecords (WorkbenchId workbenchId) = UpdateStatement $
+skipDegenerateRecords :: MonadSQL m => WorkbenchId -> m ()
+skipDegenerateRecords (WorkbenchId workbenchId) = execute $ UpdateStatement $
   update
   [(table "workbenchrow" `as` r)
    `join` (table "workbenchdataitem" `as` i)
@@ -57,45 +54,58 @@ skipDegenerateRecords (WorkbenchId workbenchId) = UpdateStatement $
     i = alias "i"
     mi = alias "mi"
 
+useFirst :: MonadSQL m => UploadTable -> m ()
+useFirst (UploadTable {idMapping}) = execute $ UpdateStatement $
+  update
+  [(table "workbenchdataitem" `as` i)
+  `join` (table "workbenchtemplatemappingitem" `as` mi)
+  `using` ["workbenchtemplatemappingitemid"]
+  ]
+  [("celldata", rawExpr "left(celldata, locate(',', celldata) - 1)")]
+  `suchThat`
+  ((locate (stringLit ",") $ project "celldata") `and` (project "workbenchtemplatemappingitemid" `equal` wbtmiId))
+  where
+    i = alias "i"
+    mi = alias "mi"
+    wbtmiId = fromMaybe null $ intLit <$> idMapping
 
-matchRecords :: WorkbenchId -> UploadTable -> Writer [Statement] ()
+matchRecords :: MonadSQL m => WorkbenchId -> UploadTable -> m ()
 matchRecords wbId uploadTable = do
   matchToOnes wbId uploadTable
   matchToManys wbId uploadTable
 
-  tell [findExistingRecords wbId uploadTable]
-  tell [skipDegenerateRecords wbId]
-  tell $ flagNewRecords wbId uploadTable
+  findExistingRecords wbId uploadTable
+  useFirst uploadTable
+  flagNewRecords wbId uploadTable
 
-
-matchToManys :: WorkbenchId -> UploadTable -> Writer [Statement] ()
+matchToManys :: MonadSQL m => WorkbenchId -> UploadTable -> m ()
 matchToManys wbId ut = do
   forM_ (toManyTables ut) $ \(ToMany {records}) ->
     forM_ records $ \(ToManyRecord {toOneTables}) ->
       forM_ toOneTables $ \toOne -> matchToManyToOne wbId toOne
 
-matchToManyToOne :: WorkbenchId -> ToOne -> Writer [Statement] ()
+matchToManyToOne :: MonadSQL m => WorkbenchId -> ToOne -> m ()
 matchToManyToOne wbId (ToOne {toOneTable}) = do
   matchToOnes wbId toOneTable
   matchToManys wbId toOneTable
 
-  tell [findExistingRecords wbId toOneTable]
-  tell [skipDegenerateRecords wbId]
-  tell $ flagNewRecords wbId toOneTable
+  findExistingRecords wbId toOneTable
+  useFirst toOneTable
+  flagNewRecords wbId toOneTable
 
-matchToOnes :: WorkbenchId -> UploadTable -> Writer [Statement] ()
+matchToOnes :: MonadSQL m => WorkbenchId -> UploadTable -> m ()
 matchToOnes wbId (UploadTable {toOneTables}) =
   forM_ toOneTables $ \(ToOne {toOneTable}) -> do
     matchToOnes wbId toOneTable
     matchToManys wbId toOneTable
 
-    tell [findExistingRecords wbId toOneTable]
-    tell [skipDegenerateRecords wbId]
-    tell $ flagNewRecords wbId toOneTable
+    findExistingRecords wbId toOneTable
+    useFirst toOneTable
+    flagNewRecords wbId toOneTable
 
-flagNewRecords :: WorkbenchId -> UploadTable -> [Statement]
+flagNewRecords :: MonadSQL m => WorkbenchId -> UploadTable -> m ()
 flagNewRecords (WorkbenchId wbId) ut@(UploadTable {mappingItems, idMapping}) =
-  [ insertFrom "workbenchdataitem" ["workbenchrowid", "celldata", "rownumber", "workbenchtemplatemappingitemid"] $
+  execute $ insertFrom "workbenchdataitem" ["workbenchrowid", "celldata", "rownumber", "workbenchtemplatemappingitemid"] $
     query
     [ select $ wbRow @@ "workbenchrowid"
     , select $ stringLit "new"
@@ -103,7 +113,6 @@ flagNewRecords (WorkbenchId wbId) ut@(UploadTable {mappingItems, idMapping}) =
     , select $ fromMaybe null $ intLit <$> idMapping
     ] `from`
     [ subqueryAs wbRow $ rowsFromWB (intLit wbId) mappingItems' excludeRows ]
-  ]
   where
     t = alias "t"
     wbRow = alias "wbrow"
@@ -111,9 +120,9 @@ flagNewRecords (WorkbenchId wbId) ut@(UploadTable {mappingItems, idMapping}) =
     excludeRows = rowsWithValuesFor $ fromMaybe null $ intLit <$> idMapping
 
 
-findExistingRecords :: WorkbenchId -> UploadTable -> Statement
+findExistingRecords :: MonadSQL m => WorkbenchId -> UploadTable -> m ()
 findExistingRecords (WorkbenchId wbId) ut@(UploadTable {tableName, idColumn, strategy, mappingItems, idMapping}) =
-  insertFrom "workbenchdataitem" ["workbenchrowid", "celldata", "rownumber", "workbenchtemplatemappingitemid"] $
+  execute $ insertFrom "workbenchdataitem" ["workbenchrowid", "celldata", "rownumber", "workbenchtemplatemappingitemid"] $
   query
   [ selectAs "rowid" $ wb @@ "workbenchrowid"
   , selectAs "ids" $ rawExpr $ "group_concat(t." <> idColumn <> ")"--t @@ idColumn

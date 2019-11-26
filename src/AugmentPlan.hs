@@ -1,30 +1,29 @@
+{-# OPTIONS_GHC -fno-warn-type-defaults #-}
 module AugmentPlan where
 
-import Prelude (Maybe(..), IO, (<>), zip, ($))
+import Prelude (Maybe(..), (<>), zip, ($))
 
-import Data.Text.IO (putStrLn)
 import Control.Monad (forM, return, (=<<))
 import Control.Newtype.Generics (unpack)
 import Database.MySQL.Simple.Types (Only(..))
-import Database.MySQL.Simple (Connection)
 
-import SQL (Expr)
-import SQLSmart (max, query, rawExpr, select, table, from, stringLit, intLit, plus, project, insertFrom, userVar)
+import SQL (MonadSQL(..))
+import SQLSmart (max, query, rawExpr, select, table, from, stringLit, intLit, plus, project, insertFrom)
 import UploadPlan (TemplateId(..), UploadPlan(..), columnName, id, ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, ToManyRecord(..), ColumnType(..), MappingItem(..))
-import Common (show, execute, runQuery)
+import Common (show)
 
 
-augmentPlan :: Connection -> UploadPlan -> IO UploadPlan
-augmentPlan conn up@(UploadPlan {uploadTable, templateId}) = do
-  ut <- insertIdFields conn templateId uploadTable
+augmentPlan :: MonadSQL m => UploadPlan -> m UploadPlan
+augmentPlan up@(UploadPlan {uploadTable, templateId}) = do
+  ut <- insertIdFields templateId uploadTable
   return up {uploadTable = ut}
 
 
-insertIdFields :: Connection -> TemplateId -> UploadTable -> IO UploadTable
-insertIdFields conn templateId ut@(UploadTable {tableName, idColumn}) = do
-  putStrLn  "Inserting an id field for the base table."
+insertIdFields :: MonadSQL m => TemplateId -> UploadTable -> m UploadTable
+insertIdFields templateId ut@(UploadTable {tableName, idColumn}) = do
+  log  "Inserting an id field for the base table."
 
-  execute conn [
+  execute $
     insertFrom "workbenchtemplatemappingitem"
       ["timestampcreated", "workbenchtemplateid", "fieldname", "tablename", "vieworder", "caption", "metadata"] $
       query [ select $ rawExpr "now()"
@@ -35,20 +34,21 @@ insertIdFields conn templateId ut@(UploadTable {tableName, idColumn}) = do
             , select $ stringLit $ idColumn
             , select $ stringLit $ "generated"
             ] `from` [table "workbenchtemplatemappingitem"]
-    ]
-
-  [Only id] <- runQuery conn (query [select $ rawExpr "last_insert_id()"])
-
-  insertIdFieldsFromToManys conn templateId =<< (insertIdFieldsFromToOnes conn templateId $ ut {idMapping = Just id})
 
 
-insertIdFieldsFromToOnes :: Connection -> TemplateId -> UploadTable -> IO UploadTable
-insertIdFieldsFromToOnes conn templateId ut@(UploadTable {tableName, toOneTables}) = do
+  result <- doQuery (query [select $ rawExpr "last_insert_id()"])
+  case result of
+    [Only id] ->
+      insertIdFieldsFromToManys templateId =<< (insertIdFieldsFromToOnes templateId $ ut {idMapping = Just id})
+
+
+insertIdFieldsFromToOnes :: MonadSQL m => TemplateId -> UploadTable -> m UploadTable
+insertIdFieldsFromToOnes templateId ut@(UploadTable {tableName, toOneTables}) = do
   toOneTables' <- forM toOneTables $ \toOne@(ToOne {toOneFK, toOneTable}) -> do
     let (UploadTable {tableName=toOneTableName}) = toOneTable
-    putStrLn $ "Inserting an id field for the " <> tableName <> " to " <> toOneTableName <> " foreign key."
+    log $ "Inserting an id field for the " <> tableName <> " to " <> toOneTableName <> " foreign key."
 
-    execute conn [
+    execute $
       insertFrom "workbenchtemplatemappingitem"
         ["timestampcreated", "workbenchtemplateid", "fieldname", "tablename", "vieworder", "caption", "metadata"] $
         query [ select $ rawExpr "now()"
@@ -59,25 +59,25 @@ insertIdFieldsFromToOnes conn templateId ut@(UploadTable {tableName, toOneTables
               , select $ stringLit $ tableName <> toOneFK
               , select $ stringLit $ "generated"
               ] `from` [table "workbenchtemplatemappingitem"]
-      ]
 
-    [Only id] <- runQuery conn (query [select $ rawExpr "last_insert_id()"])
 
-    toOneTable' <- insertIdFieldsFromToManys conn templateId
-      =<< (insertIdFieldsFromToOnes conn templateId $ toOneTable {idMapping = Just id})
+    result <- doQuery (query [select $ rawExpr "last_insert_id()"])
+    toOneTable' <- case result of
+      [Only id] -> insertIdFieldsFromToManys  templateId
+                   =<< (insertIdFieldsFromToOnes templateId $ toOneTable {idMapping = Just id})
 
     return $ toOne {toOneTable = toOneTable'}
   return (ut {toOneTables = toOneTables'} :: UploadTable)
 
-insertIdFieldsFromToManys :: Connection -> TemplateId -> UploadTable -> IO UploadTable
-insertIdFieldsFromToManys conn templateId ut@(UploadTable {toManyTables}) = do
+insertIdFieldsFromToManys :: MonadSQL m => TemplateId -> UploadTable -> m UploadTable
+insertIdFieldsFromToManys templateId ut@(UploadTable {toManyTables}) = do
   toManyTables' <- forM toManyTables $ \toMany@(ToMany {toManyTable, records}) -> do
     records' <- forM (zip [0 ..] records) $ \(index, tmr@(ToManyRecord {toOneTables})) -> do
       toOneTables' <- forM toOneTables $ \toOne@(ToOne {toOneFK, toOneTable}) -> do
         let (UploadTable {tableName=toOneTableName}) = toOneTable
-        putStrLn $ "Inserting an id field for the " <> toManyTable <> show index <> " to " <> toOneTableName <> " foreign key."
+        log $ "Inserting an id field for the " <> toManyTable <> show index <> " to " <> toOneTableName <> " foreign key."
 
-        execute conn [
+        execute $
           insertFrom "workbenchtemplatemappingitem"
             ["timestampcreated", "workbenchtemplateid", "fieldname", "tablename", "vieworder", "caption", "metadata"] $
             query [ select $ rawExpr "now()"
@@ -88,12 +88,11 @@ insertIdFieldsFromToManys conn templateId ut@(UploadTable {toManyTables}) = do
                   , select $ stringLit $ toManyTable <> (show index) <> toOneFK
                   , select $ stringLit $ "generated"
                   ] `from` [table "workbenchtemplatemappingitem"]
-          ]
 
-        [Only id] <- runQuery conn (query [select $ rawExpr "last_insert_id()"])
-
-        toOneTable' <- insertIdFieldsFromToManys conn templateId
-          =<< (insertIdFieldsFromToOnes conn templateId $ toOneTable {idMapping = Just id})
+        result <- doQuery (query [select $ rawExpr "last_insert_id()"])
+        toOneTable' <- case result of
+          [Only id] -> insertIdFieldsFromToManys templateId
+                       =<< (insertIdFieldsFromToOnes templateId $ toOneTable {idMapping = Just id})
 
         return $ toOne {toOneTable = toOneTable'}
       return (tmr {toOneTables = toOneTables'} :: ToManyRecord)
