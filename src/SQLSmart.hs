@@ -31,25 +31,29 @@ instance Whereable UpdateStatement where
   suchThat update when = update { where_ = Just when }
 
 distinct :: QueryExpr -> QueryExpr
-distinct q = q { selectType = SelectDistinct }
+distinct (Select s) = Select $ s { selectType = SelectDistinct }
+
+union :: QueryExpr -> QueryExpr -> QueryExpr
+union (Select s) q = Union s q
+union (Union s q) q' = Union s (q `union` q')
 
 query :: [SelectTerm] -> QueryExpr
-query terms =
-  QueryExpr { selectType = SelectAll
-            , selectTerms = terms
-            , fromExpr = [TableFactor Dual]
-            , where_ = Nothing
-            , SQL.having = Nothing
-            , grouping = []
-            , ordering = []
-            , limit = Nothing
-            }
+query terms = Select $ SelectExpr
+  { selectType = SelectAll
+  , selectTerms = terms
+  , fromExpr = [TableFactor Dual]
+  , where_ = Nothing
+  , SQL.having = Nothing
+  , grouping = []
+  , ordering = []
+  , limit = Nothing
+  }
 
 queryDistinct :: [SelectTerm] -> QueryExpr
 queryDistinct terms = distinct $ query terms
 
 from :: QueryExpr -> [TableRef] -> QueryExpr
-from q fs = q { fromExpr = from' }
+from (Select s) fs = Select $ s { fromExpr = from' }
   where
     from' = case fs of
       [] -> [TableFactor Dual]
@@ -102,16 +106,16 @@ as t a = case t of
       NaturalRightJoin l r -> NaturalRightJoin l (r `as` a')
 
 instance Whereable QueryExpr where
-  suchThat q expr = q { where_ = Just expr }
+  suchThat (Select s) expr = Select $ s { where_ = Just expr }
 
 having :: QueryExpr -> Expr -> QueryExpr
-having q expr = q { SQL.having = Just expr }
+having (Select s) expr = Select $ s { SQL.having = Just expr }
 
 groupBy :: QueryExpr -> [Expr] -> QueryExpr
-groupBy q exprs = q { grouping = exprs }
+groupBy (Select s) exprs = Select $ s { grouping = exprs }
 
 orderBy :: QueryExpr -> [OrderTerm] -> QueryExpr
-orderBy q terms = q { ordering = terms }
+orderBy (Select s) terms = Select $ s { ordering = terms }
 
 asc :: Expr -> OrderTerm
 asc = Ascending

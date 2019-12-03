@@ -7,7 +7,7 @@ import Data.Text.Prettyprint.Doc.Render.Text (renderStrict)
 import Data.Text.Encoding (encodeUtf8)
 import Text.Regex.PCRE.Light (match, dollar_endonly, compile, Regex)
 
-import SQL (UpdateStatement(..), DeleteStatement(..), OrderTerm(..), JoinSpec(..), ColumnName(..), TableName(..), JoinedTable(..), TableFactor(..), TableRef(..), SelectTerm(..), SelectType(..), QueryExpr(..), SubQuery(..), FCall(..), Literal(..), BinOp(..), Expr(..), CompOp(..), Alias(..), Identifier(..), Statement(..), Script(..))
+import SQL (SelectExpr(..), UpdateStatement(..), DeleteStatement(..), OrderTerm(..), JoinSpec(..), ColumnName(..), TableName(..), JoinedTable(..), TableFactor(..), TableRef(..), SelectTerm(..), SelectType(..), QueryExpr(..), SubQuery(..), FCall(..), Literal(..), BinOp(..), Expr(..), CompOp(..), Alias(..), Identifier(..), Statement(..), Script(..))
 import SQLKeyword (keywords)
 
 notImplemented :: forall a b. a -> Doc b
@@ -58,7 +58,14 @@ renderAlias :: Alias -> Doc a
 renderAlias (Alias a) = pretty $ escapeIdentifier a
 
 renderQuery :: QueryExpr -> Doc a
-renderQuery (QueryExpr {selectType, selectTerms, fromExpr, where_, having, grouping, ordering}) = case selectTerms of
+renderQuery (Select s) = renderSelectExpr s
+renderQuery (Union s q) =
+  renderQuery (Select s)
+  <> line <> "union"
+  <> line <> renderQuery q
+
+renderSelectExpr :: SelectExpr -> Doc a
+renderSelectExpr (SelectExpr {selectType, selectTerms, fromExpr, where_, having, grouping, ordering}) = case selectTerms of
   [] -> mempty
   _ -> group (
     group $ renderSelectType selectType
@@ -69,7 +76,7 @@ renderQuery (QueryExpr {selectType, selectTerms, fromExpr, where_, having, group
     <> renderHaving having
     <> renderGroupBy grouping
     <> renderOrderBy ordering
-  -- renderLimit q.limit
+    -- renderLimit q.limit
 
 renderWhere :: Maybe Expr -> Doc a
 renderWhere Nothing = mempty

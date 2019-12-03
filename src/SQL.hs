@@ -24,7 +24,9 @@ data Statement
 data UpdateStatement = Update { tables :: [TableRef], where_ :: Maybe Expr, set :: [(ColumnName, Expr)] }
 data DeleteStatement = Delete  { tableName :: TableName, where_ :: Maybe Expr }
 
-data QueryExpr = QueryExpr
+data QueryExpr = Select SelectExpr | Union SelectExpr QueryExpr
+
+data SelectExpr = SelectExpr
   { selectType :: SelectType
   , selectTerms :: [SelectTerm]
   , fromExpr :: [TableRef]
