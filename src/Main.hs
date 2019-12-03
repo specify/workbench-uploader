@@ -16,7 +16,7 @@ import Database.MySQL.Simple (defaultConnectInfo, Connection, connect, ConnectIn
 import qualified Database.MySQL.Simple as MySQL
 
 
-import SQL (MonadSQL(..))
+import MonadSQL (MonadSQL(..))
 import SQLRender (renderQuery, renderStatement, renderSQL)
 import SQLSmart (intLit)
 import ExamplePlan (uploadPlan)
@@ -24,7 +24,7 @@ import AugmentPlan (augmentPlan)
 import UploadPlan (WorkbenchId(..), UploadPlan(..))
 import Common (runQuery, showWB)
 import MatchExistingRecords (matchExistingRecords, clean)
-import MatchRecords (matchLeafRecords)
+import MatchRecords (uploadLeafRecords, matchLeafRecords)
 
 data Env = Env {conn :: Connection}
 
@@ -55,6 +55,7 @@ main = do
     ("example" : _) -> printPlan uploadPlan
     ("augment" : args') -> doAugment args'
     ("match" : args') -> doMatch args'
+    ("upload" : args') -> doUpload args'
     ("clean" : args') -> doClean args'
     _ -> fail "bad command"
 
@@ -88,6 +89,14 @@ doMatch (inFile : _) = do
     Right plan -> runDB "bishop" $ matchLeafRecords plan
     Left err -> fail $ "couldn't parse json:" <> err
 doMatch _ = fail "expected inFile"
+
+doUpload :: [String] -> IO ()
+doUpload (inFile : _) = do
+  decoded <- eitherDecode <$> readFile inFile
+  case decoded of
+    Right plan -> runDB "bishop" $ uploadLeafRecords plan
+    Left err -> fail $ "couldn't parse json:" <> err
+doUpload _ = fail "expected inFile"
 
 doClean :: [String] -> IO ()
 doClean (inFile : _) = do

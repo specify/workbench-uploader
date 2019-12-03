@@ -7,7 +7,7 @@ import Control.Monad (forM, return, (=<<))
 import Control.Newtype.Generics (unpack)
 import Database.MySQL.Simple.Types (Only(..))
 
-import SQL (MonadSQL(..))
+import MonadSQL (MonadSQL(..))
 import SQLSmart (max, query, rawExpr, select, table, from, stringLit, intLit, plus, project, insertFrom)
 import UploadPlan (TemplateId(..), UploadPlan(..), columnName, id, ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, ToManyRecord(..), ColumnType(..), MappingItem(..))
 import Common (show)

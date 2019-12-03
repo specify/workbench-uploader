@@ -6,7 +6,7 @@ import Data.Maybe (fromMaybe)
 import qualified Data.List as L
 import qualified Data.List.Extra as L
 import UploadPlan (WorkbenchId(..), UploadPlan(..), MappingItem(..), UploadStrategy(..), ToManyRecord(..), ToMany(..), ToOne(..), UploadTable(..))
-import SQL (MonadSQL)
+import MonadSQL (logQuery, MonadSQL)
 import SQLSmart (intLit, null, alias)
 import MatchExistingRecords (flagNewRecords, useFirst, findExistingRecords)
 import Common (parseMappingItem, newValuesFromWB)
@@ -77,4 +77,4 @@ uploadLeafRecords up@(UploadPlan {uploadTable, workbenchId}) = do
       let (WorkbenchId wbId) = workbenchId
       let convert = fmap $ parseMappingItem (alias "unused")
       let q = newValuesFromWB (intLit wbId) (fromMaybe null $ intLit <$> idMapping uploadTable) (convert <$> mappingItems)
-      pure ()
+      logQuery q

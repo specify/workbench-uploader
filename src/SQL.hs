@@ -1,14 +1,9 @@
 module SQL where
 
 import Data.Text
-import Database.MySQL.Simple.QueryResults (QueryResults)
 
 newtype Script = Script [Statement]
 
-class Monad m => MonadSQL m where
-  execute :: Statement -> m ()
-  doQuery :: (QueryResults r) => QueryExpr -> m [r]
-  log :: Text -> m ()
 
 data Statement
   = QueryStatement QueryExpr

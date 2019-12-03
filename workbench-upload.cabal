@@ -46,6 +46,7 @@ executable workbench-upload
                 ExamplePlan
                 MatchExistingRecords
                 MatchRecords
+                MonadSQL
                 SQL
                 SQLKeyword
                 SQLRender
