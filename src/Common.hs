@@ -3,7 +3,7 @@ module Common where
 import Data.String (fromString)
 import Data.Text (pack, unpack, Text)
 import Data.List.Index (ifoldl, imap)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, catMaybes)
 import Database.MySQL.Simple.QueryResults (QueryResults)
 import Database.MySQL.Simple (Connection)
 import qualified Database.MySQL.Simple as MySQL
@@ -197,6 +197,37 @@ rowsFromWB wbId mappingItems excludeRows =
       ( ((c i @@ "workbenchrowid") `equal` (r @@ "workbenchrowid"))
         `and` (((c i) @@ "workbenchtemplatemappingitemid") `equal` (mappingId item))
       )
+
+newValuesFromWB :: Expr -> Expr -> [Maybe MappingItem] -> QueryExpr
+newValuesFromWB wbId idMappingId mappingItems =
+  query (imap selectWBVal mappingItems)
+  `from`
+  [ ifoldl joinWBCell (table "workbenchrow" `as` r) (catMaybes mappingItems)
+    `join` (table "workbenchdataitem" `as` idCol)
+    `on` ((idCol @@ "workbenchtemplatemappingitemid" `equal` idMappingId)
+          `and` (idCol @@ "workbenchrowid" `equal` (r @@ "workbenchrowid"))
+          `and` (idCol @@ "celldata" `equal` (stringLit "new"))
+         )
+  ]
+  `suchThat`
+  (((r @@ "workbenchid") `equal` wbId) `and` (r @@ "uploadstatus" `equal` intLit 0))
+  `having`
+  (not $ (row $ fmap (\i -> project $ selectFromWBas i) (catMaybes mappingItems)) <=> (row $ fmap (const null) (catMaybes mappingItems)))
+  where
+    idCol = alias "idcol"
+    r = alias "r"
+    c i = alias $ "c" <> ( show i)
+    selectWBVal i (Just item) = selectAs (selectFromWBas item) $ parseValue (columnType item) ((c i) @@ "celldata")
+    selectWBVal _ Nothing = select null
+    joinWBCell :: TableRef -> Int -> MappingItem -> TableRef
+    joinWBCell left i item =
+      left `leftJoin` (table "workbenchdataitem" `as` c i)
+      `on`
+      ( ((c i @@ "workbenchrowid") `equal` (r @@ "workbenchrowid"))
+        `and` (((c i) @@ "workbenchtemplatemappingitemid") `equal` (mappingId item))
+      )
+
+
 
 valuesFromWB :: Expr -> [MappingItem] -> QueryExpr -> QueryExpr
 valuesFromWB wbId mappingItems excludeRows =

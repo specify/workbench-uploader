@@ -1,4 +1,4 @@
-module MatchExistingRecords (matchExistingRecords, clean) where
+module MatchExistingRecords (matchExistingRecords, clean, findExistingRecords, useFirst, flagNewRecords) where
 
 import Prelude ((<$>), fmap, (<>), ($))
 

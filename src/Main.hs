@@ -24,6 +24,7 @@ import AugmentPlan (augmentPlan)
 import UploadPlan (WorkbenchId(..), UploadPlan(..))
 import Common (runQuery, showWB)
 import MatchExistingRecords (matchExistingRecords, clean)
+import MatchRecords (matchLeafRecords)
 
 data Env = Env {conn :: Connection}
 
@@ -84,7 +85,7 @@ doMatch :: [String] -> IO ()
 doMatch (inFile : _) = do
   decoded <- eitherDecode <$> readFile inFile
   case decoded of
-    Right plan -> runDB "bishop" $ matchExistingRecords plan
+    Right plan -> runDB "bishop" $ matchLeafRecords plan
     Left err -> fail $ "couldn't parse json:" <> err
 doMatch _ = fail "expected inFile"
 
