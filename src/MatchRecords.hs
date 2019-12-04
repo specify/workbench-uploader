@@ -7,11 +7,10 @@ import qualified Data.List as L
 import qualified Data.List.Extra as L
 import UploadPlan (WorkbenchId(..), UploadPlan(..), MappingItem(..), UploadStrategy(..), ToManyRecord(..), ToMany(..), ToOne(..), UploadTable(..))
 import SQL (QueryExpr)
-import MonadSQL (logQuery, MonadSQL)
-import SQLSmart (union, intLit, null, alias)
+import MonadSQL (MonadSQL(..))
+import SQLSmart (createTempTable, union, intLit, null, alias)
 import MatchExistingRecords (flagNewRecords, useFirst, findExistingRecords)
 import Common (parseMappingItem, newValuesFromWB)
-import qualified Common
 
 reconcileMappingItems :: [UploadTable] -> [(UploadTable, [Maybe MappingItem])]
 reconcileMappingItems uploadTables = do
@@ -75,8 +74,7 @@ uploadLeafRecords up@(UploadPlan {uploadTable, workbenchId}) = do
   let groups = uploadGroups uploadTable
   forM_ groups $ \group -> do
     let queries = (\(uploadTable, mappingItems) -> valuesFromWB workbenchId uploadTable mappingItems) <$> (reconcileMappingItems group)
-    let q = foldl1 union queries
-    logQuery q
+    execute $ createTempTable "newvalues" $ foldl1 union queries
 
 valuesFromWB :: WorkbenchId -> UploadTable -> [Maybe MappingItem] -> QueryExpr
 valuesFromWB (WorkbenchId wbId) (UploadTable {idMapping}) mappingItems =

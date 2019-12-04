@@ -17,6 +17,10 @@ insertFrom :: Text -> [Text] -> QueryExpr -> Statement
 insertFrom tableName cols queryExpr =
   InsertFrom { tableName = TableName tableName, columns = map ColumnName cols, queryExpr = queryExpr}
 
+createTempTable :: Text -> QueryExpr -> Statement
+createTempTable tableName queryExpr =
+  CreateTempTable { tableName = TableName tableName, queryExpr = queryExpr }
+
 delete :: Text -> DeleteStatement
 delete tableName = Delete { tableName = TableName tableName, where_ = Nothing }
 

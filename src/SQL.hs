@@ -11,6 +11,7 @@ data Statement
   | InsertFrom  { tableName :: TableName, columns :: [ColumnName], queryExpr :: QueryExpr }
   | DeleteStatement DeleteStatement
   | UpdateStatement UpdateStatement
+  | CreateTempTable { tableName :: TableName, queryExpr :: QueryExpr }
   | StartTransaction
   | Commit
   | RollBack

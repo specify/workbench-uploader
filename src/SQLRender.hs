@@ -54,6 +54,12 @@ renderStatement (DeleteStatement (Delete {tableName, where_})) =
   <> renderWhere where_
   <> ";"
 
+renderStatement (CreateTempTable {tableName, queryExpr}) =
+  group $ "create temporary table"
+  <> line <> renderTableName tableName
+  <> line <> renderQuery queryExpr
+  <> ";"
+
 renderAlias :: Alias -> Doc a
 renderAlias (Alias a) = pretty $ escapeIdentifier a
 
