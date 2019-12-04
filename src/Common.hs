@@ -200,7 +200,7 @@ rowsFromWB wbId mappingItems excludeRows =
 
 newValuesFromWB :: Expr -> Expr -> [Maybe MappingItem] -> QueryExpr
 newValuesFromWB wbId idMappingId mappingItems =
-  query (imap selectWBVal mappingItems)
+  queryDistinct (imap selectWBVal mappingItems)
   `from`
   [ ifoldl joinWBCell (table "workbenchrow" `as` r) (catMaybes mappingItems)
     `join` (table "workbenchdataitem" `as` idCol)

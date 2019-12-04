@@ -1,6 +1,6 @@
 module MatchRecords where
 
-import Prelude (foldl1, (<$>), Maybe(..), pure, ($), (==), undefined, (<>), fmap)
+import Prelude (head, foldl1, (<$>), Maybe(..), pure, ($), (==), undefined, (<>), fmap)
 import Control.Monad (forM_)
 import Data.Maybe (fromMaybe)
 import qualified Data.List as L
@@ -8,7 +8,7 @@ import qualified Data.List.Extra as L
 import UploadPlan (WorkbenchId(..), UploadPlan(..), MappingItem(..), UploadStrategy(..), ToManyRecord(..), ToMany(..), ToOne(..), UploadTable(..))
 import SQL (QueryExpr)
 import MonadSQL (MonadSQL(..))
-import SQLSmart (createTempTable, union, intLit, null, alias)
+import SQLSmart (startTransaction, createTempTable, union, intLit, null, alias, rollback)
 import MatchExistingRecords (flagNewRecords, useFirst, findExistingRecords)
 import Common (parseMappingItem, newValuesFromWB)
 
@@ -71,10 +71,12 @@ matchLeafRecords up@(UploadPlan {uploadTable, workbenchId}) = do
 
 uploadLeafRecords :: MonadSQL m => UploadPlan -> m ()
 uploadLeafRecords up@(UploadPlan {uploadTable, workbenchId}) = do
+  execute $ startTransaction
   let groups = uploadGroups uploadTable
   forM_ groups $ \group -> do
     let queries = (\(uploadTable, mappingItems) -> valuesFromWB workbenchId uploadTable mappingItems) <$> (reconcileMappingItems group)
-    execute $ createTempTable "newvalues" $ foldl1 union queries
+    execute $ createTempTable ("newvalues" <> tableName (head group)) $ foldl1 union queries
+  execute $ rollback
 
 valuesFromWB :: WorkbenchId -> UploadTable -> [Maybe MappingItem] -> QueryExpr
 valuesFromWB (WorkbenchId wbId) (UploadTable {idMapping}) mappingItems =
