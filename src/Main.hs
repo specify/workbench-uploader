@@ -44,7 +44,9 @@ instance MonadSQL UploadMonad where
     Env conn <- ask
     lift $ MySQL.query_ conn $ fromString $ unpack $ sql
 
-  log = lift <$> putStrLn
+  log msg = do
+    lift $ putStrLn msg
+    lift $ putStrLn ""
 
 main :: IO ()
 main = do

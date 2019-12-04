@@ -1,13 +1,14 @@
 module MatchRecords where
 
-import Prelude ((<$>), Maybe(..), pure, ($), (==), undefined, (<>), fmap)
+import Prelude (foldl1, (<$>), Maybe(..), pure, ($), (==), undefined, (<>), fmap)
 import Control.Monad (forM_)
 import Data.Maybe (fromMaybe)
 import qualified Data.List as L
 import qualified Data.List.Extra as L
 import UploadPlan (WorkbenchId(..), UploadPlan(..), MappingItem(..), UploadStrategy(..), ToManyRecord(..), ToMany(..), ToOne(..), UploadTable(..))
+import SQL (QueryExpr)
 import MonadSQL (logQuery, MonadSQL)
-import SQLSmart (intLit, null, alias)
+import SQLSmart (union, intLit, null, alias)
 import MatchExistingRecords (flagNewRecords, useFirst, findExistingRecords)
 import Common (parseMappingItem, newValuesFromWB)
 import qualified Common
@@ -73,8 +74,12 @@ uploadLeafRecords :: MonadSQL m => UploadPlan -> m ()
 uploadLeafRecords up@(UploadPlan {uploadTable, workbenchId}) = do
   let groups = uploadGroups uploadTable
   forM_ groups $ \group -> do
-    forM_ (reconcileMappingItems group) $ \(uploadTable, mappingItems) -> do
-      let (WorkbenchId wbId) = workbenchId
-      let convert = fmap $ parseMappingItem (alias "unused")
-      let q = newValuesFromWB (intLit wbId) (fromMaybe null $ intLit <$> idMapping uploadTable) (convert <$> mappingItems)
-      logQuery q
+    let queries = (\(uploadTable, mappingItems) -> valuesFromWB workbenchId uploadTable mappingItems) <$> (reconcileMappingItems group)
+    let q = foldl1 union queries
+    logQuery q
+
+valuesFromWB :: WorkbenchId -> UploadTable -> [Maybe MappingItem] -> QueryExpr
+valuesFromWB (WorkbenchId wbId) (UploadTable {idMapping}) mappingItems =
+  newValuesFromWB (intLit wbId) (fromMaybe null $ intLit <$> idMapping) (convert <$> mappingItems)
+  where
+     convert = fmap $ parseMappingItem (alias "unused")
