@@ -19,9 +19,9 @@ uploadPlan = UploadPlan
       -- , {columnName = "startDate", id = 1346, columnType = DateType "%d %b %Y"}
       , MappingItem {columnName = "verbatimDate", id = 1366, columnType = StringType}
       ]
-    , staticValues =
-      [ NamedValue { column = "disciplineid", value = "32768" }
-      , NamedValue { column = "timestampcreated", value = "now()" }
+    , staticValues = [ NamedValue { column = "disciplineid", value = "32768" } ]
+    , metaValues =
+      [ NamedValue { column = "timestampcreated", value = "now()" }
       , NamedValue { column = "guid", value = "uuid()" }
       ]
     , toOneTables =
@@ -44,7 +44,9 @@ uploadPlan = UploadPlan
           , staticValues =
               [ NamedValue {column = "srclatlongunit", value = "0"}
               , NamedValue {column = "disciplineid", value = "32768"}
-              , NamedValue {column = "timestampcreated", value = "now()"}
+              ]
+          , metaValues =
+              [ NamedValue {column = "timestampcreated", value = "now()"}
               , NamedValue {column = "guid", value = "uuid()" }
               ]
           , toOneTables = []
@@ -81,9 +83,11 @@ collectorRecord ordernumber mappingId = ToManyRecord
         , mappingItems = [MappingItem {columnName = "lastname", id = mappingId, columnType = StringType} ]
         , staticValues =
             [ NamedValue {column = "divisionid", value = "2"}
-            , NamedValue {column = "timestampcreated", value = "now()"}
-            , NamedValue {column = "guid", value = "uuid()"}
             , NamedValue {column = "agentType", value = "2"}
+            ]
+        , metaValues =
+            [ NamedValue {column = "guid", value = "uuid()"}
+            , NamedValue {column = "timestampcreated", value = "now()"}
             ]
         , toOneTables = []
         , toManyTables = []

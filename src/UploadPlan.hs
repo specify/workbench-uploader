@@ -67,6 +67,7 @@ data UploadTable = UploadTable
   , strategy :: UploadStrategy
   , mappingItems :: [MappingItem]
   , staticValues :: [NamedValue]
+  , metaValues :: [NamedValue]
   , toOneTables :: [ToOne]
   , toManyTables :: [ToMany]
   }

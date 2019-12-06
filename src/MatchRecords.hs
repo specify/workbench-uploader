@@ -7,8 +7,9 @@ import Data.Maybe (isJust, catMaybes, fromMaybe)
 import Data.List.Index (ifoldl, imap)
 import qualified Data.List as L
 import qualified Data.List.Extra as L
-import UploadPlan (ColumnType, WorkbenchId(..), UploadPlan(..), MappingItem(..), UploadStrategy(..), ToManyRecord(..), ToMany(..), ToOne(..), UploadTable(..))
-import SQL (Alias, SelectTerm, TableRef, Expr, QueryExpr)
+import Data.Tuple.Extra (fst3)
+import UploadPlan (NamedValue(..), ColumnType, WorkbenchId(..), UploadPlan(..), MappingItem(..), UploadStrategy(..), ToManyRecord(..), ToMany(..), ToOne(..), UploadTable(..))
+import SQL (ColumnName(..), Alias, SelectTerm, TableRef, Expr, QueryExpr)
 import MonadSQL (MonadSQL(..))
 import SQLSmart
  (rollback, union, createTempTable, startTransaction,  (<=>)
@@ -52,24 +53,38 @@ import qualified Common
 
 data ColumnDescriptor = ColumnDescriptor
   { colName :: Text
-  , mappingIdAndType :: Maybe (Int, ColumnType)
+  , colSource :: ColumnSource
   , position :: Int
   }
 
-reconcileMappingItems :: [UploadTable] -> [(UploadTable, [ColumnDescriptor])]
-reconcileMappingItems uploadTables = do
-  ut@(UploadTable {mappingItems}) <- uploadTables
-  let reconciled = do
-        (i, column) <- L.zip [0 ..] columns
-        let mappingIdAndType = (\(MappingItem {id, columnType}) -> (id, columnType)) <$> L.find ((==) column . columnName) mappingItems
-        pure $ ColumnDescriptor {colName = column, mappingIdAndType = mappingIdAndType, position = i}
-  pure (ut, reconciled)
-  where
-    columns = L.nub $ L.sort $ do
-      UploadTable {mappingItems} <- uploadTables
-      (MappingItem {columnName}) <- mappingItems
-      pure $ columnName
+data ColumnSource = WBValue (Int, ColumnType) | StaticValue Expr
 
+
+columnDescriptorsForTable :: [ColumnName] -> UploadTable -> [ColumnDescriptor]
+columnDescriptorsForTable columns (UploadTable {mappingItems, staticValues}) = do
+  (i, ColumnName c) <- L.zip [0 ..] columns
+  case L.find ((==) c . columnName) mappingItems of
+    Just (MappingItem {id, columnType}) ->
+      pure $ ColumnDescriptor {colName = c, colSource = WBValue (id, columnType), position = i}
+    Nothing ->
+      case L.find ((==) c . column) staticValues of
+        Just (NamedValue {value}) ->
+          pure $ ColumnDescriptor {colName = c, colSource = StaticValue $ rawExpr value, position = i}
+        Nothing ->
+          pure $ ColumnDescriptor {colName = c, colSource = StaticValue null, position = i}
+
+columnsForTableGroup :: [UploadTable] -> [ColumnName]
+columnsForTableGroup uploadTables = ColumnName <$> (L.nub $ L.sort $ (staticColumns <> mappingColumns))
+  where
+    staticColumns = do
+      UploadTable {staticValues} <- uploadTables
+      NamedValue {column} <- staticValues
+      pure column
+
+    mappingColumns = do
+      UploadTable {mappingItems} <- uploadTables
+      MappingItem {columnName} <- mappingItems
+      pure columnName
 
 uploadGroups :: UploadTable -> [[UploadTable]]
 uploadGroups ut =
@@ -119,7 +134,8 @@ uploadLeafRecords up@(UploadPlan {uploadTable, workbenchId}) = do
   execute $ startTransaction
   let groups = uploadGroups uploadTable
   forM_ groups $ \group -> do
-    let queries = (\(uploadTable, mappingItems) -> valuesFromWB workbenchId uploadTable mappingItems) <$> (reconcileMappingItems group)
+    let columns = columnsForTableGroup group
+    let queries = (\ut -> valuesFromWB workbenchId ut (columnDescriptorsForTable columns ut)) <$> group
     execute $ createTempTable ("newvalues" <> tableName (head group)) $ foldl1 union queries
   execute $ rollback
 
@@ -141,20 +157,30 @@ newValuesFromWB wbId idMappingId descriptors =
   `suchThat`
   (((r @@ "workbenchid") `equal` wbId) `and` (r @@ "uploadstatus" `equal` intLit 0))
   `having`
-  (not $ (row $ (project . colName) <$> wbCols) <=> (row $ (const null) <$> wbCols))
+  (not $ (row $ (project . fst3) <$> wbCols) <=> (row $ (const null) <$> wbCols))
   where
     idCol = alias "idcol"
     r = alias "r"
     c i = alias $ "c" <> ( Common.show i)
-    wbCols = L.filter (isJust . mappingIdAndType) descriptors
-    selectWBVal (ColumnDescriptor {colName, mappingIdAndType=mit, position=i}) =
-      selectAs colName $ nullable (\(_, colType) -> parseValue colType ((c i) @@ "celldata")) mit
-    joinWBCell :: TableRef -> ColumnDescriptor -> TableRef
-    joinWBCell left (ColumnDescriptor {position=i, mappingIdAndType}) =
+
+    wbCols = do
+      ColumnDescriptor {colName, position=i, colSource} <- descriptors
+      case colSource of
+        WBValue (mappingId, _) -> [(colName, i, mappingId)]
+        _ -> []
+
+
+    selectWBVal (ColumnDescriptor {colName, colSource, position=i}) =
+      case colSource of
+        WBValue (_, colType) -> selectAs colName $ parseValue colType ((c i) @@ "celldata")
+        StaticValue expr -> selectAs colName expr
+
+    joinWBCell :: TableRef -> (Text, Int, Int) -> TableRef
+    joinWBCell left (_, i, mappingId) =
       left `leftJoin` (table "workbenchdataitem" `as` c i)
       `on`
       ( ((c i @@ "workbenchrowid") `equal` (r @@ "workbenchrowid"))
-        `and` (((c i) @@ "workbenchtemplatemappingitemid") `equal` (nullable intLit $ fst <$> mappingIdAndType))
+        `and` (((c i) @@ "workbenchtemplatemappingitemid") `equal` (intLit mappingId))
       )
 
 nullable :: (a -> Expr) -> Maybe a -> Expr
