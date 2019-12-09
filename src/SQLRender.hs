@@ -46,12 +46,13 @@ instance Executable InsertFromStatement where
     ] <> ";"
 
 instance Executable UpdateStatement where
-  renderStatement (UpdateStatement {tables, where_, set}) = renderSQL $
+  renderStatement (UpdateStatement {tables, where_, set, ordering}) = renderSQL $
     group $ "update"
     <> line <> (sep $ punctuate comma $ fmap renderTableRef tables)
     <> line <> "set"
     <> line <> (sep $ punctuate comma $ fmap (\(col, val) -> renderColumnName col <+> "=" <+> renderExpr val) set)
     <> renderWhere where_
+    <> renderOrderBy ordering
     <> ";"
 
 instance Executable DeleteStatement where

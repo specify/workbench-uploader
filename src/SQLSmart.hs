@@ -31,12 +31,17 @@ instance Whereable DeleteStatement where
   when stmt expr = stmt { where_ = Just expr }
 
 update :: [TableRef] -> [(Text, Expr)] -> UpdateStatement
-update tables set =
-  UpdateStatement { tables = tables, where_ = Nothing, set = fmap (\(col, val) -> (ColumnName col, val)) set}
+update tables set = UpdateStatement
+  { tables = tables
+  , where_ = Nothing
+  , ordering = []
+  , set = fmap (\(col, val) -> (ColumnName col, val)) set}
 
 instance Whereable UpdateStatement where
   when stmt expr = stmt { where_ = Just expr }
 
+instance Orderable UpdateStatement where
+  orderBy stmt terms = stmt { ordering = terms }
 
 distinct :: QueryExpr -> QueryExpr
 distinct (Select s) = Select $ s { selectType = SelectDistinct }

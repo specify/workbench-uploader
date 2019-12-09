@@ -8,12 +8,38 @@ data SimpleStatement
   | Commit
   | RollBack
 
-data UpdateStatement = UpdateStatement { tables :: [TableRef], where_ :: Maybe Expr, set :: [(ColumnName, Expr)] }
-data DeleteStatement = DeleteStatement  { tableName :: TableName, where_ :: Maybe Expr }
-data InsertValuesStatement = InsertValuesStatement { tableName :: TableName, columns :: [ColumnName], values :: [[Expr]] }
-data InsertFromStatement = InsertFromStatement  { tableName :: TableName, columns :: [ColumnName], queryExpr :: QueryExpr }
-data CreateTempTableStatement = CreateTempTableStatement { tableName :: TableName, queryExpr :: QueryExpr }
+
+data UpdateStatement = UpdateStatement
+  { tables :: [TableRef]
+  , where_ :: Maybe Expr
+  , set :: [(ColumnName, Expr)]
+  , ordering :: [OrderTerm]
+  }
+
+data DeleteStatement = DeleteStatement
+  { tableName :: TableName
+  , where_ :: Maybe Expr
+  }
+
+data InsertValuesStatement = InsertValuesStatement
+  { tableName :: TableName
+  , columns :: [ColumnName]
+  , values :: [[Expr]]
+  }
+
+data InsertFromStatement = InsertFromStatement
+  { tableName :: TableName
+  , columns :: [ColumnName]
+  , queryExpr :: QueryExpr
+  }
+
+data CreateTempTableStatement = CreateTempTableStatement
+  { tableName :: TableName
+  , queryExpr :: QueryExpr
+  }
+
 data SetUserVarStatement = SetUserVarStatement Text Expr
+
 
 data QueryExpr = Select SelectExpr | Union SelectExpr QueryExpr
 
