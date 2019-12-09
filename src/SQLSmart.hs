@@ -8,28 +8,31 @@ import qualified SQL
 class Whereable a where
   suchThat :: a -> Expr -> a
 
+class Orderable a where
+  orderBy :: a -> [OrderTerm] -> a
 
-insertValues :: Text -> [Text] -> [[Expr]] -> Statement
+
+insertValues :: Text -> [Text] -> [[Expr]] -> InsertValuesStatement
 insertValues tableName cols values =
-  InsertValues { tableName = TableName tableName, columns = map ColumnName cols, values = values }
+  InsertValuesStatement { tableName = TableName tableName, columns = map ColumnName cols, values = values }
 
-insertFrom :: Text -> [Text] -> QueryExpr -> Statement
+insertFrom :: Text -> [Text] -> QueryExpr -> InsertFromStatement
 insertFrom tableName cols queryExpr =
-  InsertFrom { tableName = TableName tableName, columns = map ColumnName cols, queryExpr = queryExpr}
+  InsertFromStatement { tableName = TableName tableName, columns = map ColumnName cols, queryExpr = queryExpr}
 
-createTempTable :: Text -> QueryExpr -> Statement
+createTempTable :: Text -> QueryExpr -> CreateTempTableStatement
 createTempTable tableName queryExpr =
-  CreateTempTable { tableName = TableName tableName, queryExpr = queryExpr }
+  CreateTempTableStatement { tableName = TableName tableName, queryExpr = queryExpr }
 
 delete :: Text -> DeleteStatement
-delete tableName = Delete { tableName = TableName tableName, where_ = Nothing }
+delete tableName = DeleteStatement { tableName = TableName tableName, where_ = Nothing }
 
 instance Whereable DeleteStatement where
   suchThat delete when = delete { where_ = Just when }
 
 update :: [TableRef] -> [(Text, Expr)] -> UpdateStatement
 update tables set =
-  Update { tables = tables, where_ = Nothing, set = fmap (\(col, val) -> (ColumnName col, val)) set}
+  UpdateStatement { tables = tables, where_ = Nothing, set = fmap (\(col, val) -> (ColumnName col, val)) set}
 
 instance Whereable UpdateStatement where
   suchThat update when = update { where_ = Just when }
@@ -118,8 +121,9 @@ having (Select s) expr = Select $ s { SQL.having = Just expr }
 groupBy :: QueryExpr -> [Expr] -> QueryExpr
 groupBy (Select s) exprs = Select $ s { grouping = exprs }
 
-orderBy :: QueryExpr -> [OrderTerm] -> QueryExpr
-orderBy (Select s) terms = Select $ s { ordering = terms }
+
+instance Orderable QueryExpr where
+  orderBy (Select s) terms = Select $ s { ordering = terms }
 
 asc :: Expr -> OrderTerm
 asc = Ascending
@@ -220,8 +224,8 @@ row = RowExpr
 rawExpr :: Text -> Expr
 rawExpr = RawExpr
 
-setUserVar :: Text -> Expr -> Statement
-setUserVar = SetUserVar
+setUserVar :: Text -> Expr -> SetUserVarStatement
+setUserVar = SetUserVarStatement
 
 (@=) :: Text -> Expr -> Expr
 (@=) = Assignment
@@ -236,11 +240,11 @@ starFrom = StarFrom
 alias :: Text -> Alias
 alias = Alias
 
-startTransaction :: Statement
+startTransaction :: SimpleStatement
 startTransaction = StartTransaction
 
-commit :: Statement
+commit :: SimpleStatement
 commit = Commit
 
-rollback :: Statement
+rollback :: SimpleStatement
 rollback = RollBack

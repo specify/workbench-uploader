@@ -7,7 +7,7 @@ import Data.Text.Prettyprint.Doc.Render.Text (renderStrict)
 import Data.Text.Encoding (encodeUtf8)
 import Text.Regex.PCRE.Light (match, dollar_endonly, compile, Regex)
 
-import SQL (SelectExpr(..), UpdateStatement(..), DeleteStatement(..), OrderTerm(..), JoinSpec(..), ColumnName(..), TableName(..), JoinedTable(..), TableFactor(..), TableRef(..), SelectTerm(..), SelectType(..), QueryExpr(..), SubQuery(..), FCall(..), Literal(..), BinOp(..), Expr(..), CompOp(..), Alias(..), Identifier(..), Statement(..), Script(..))
+import SQL
 import SQLKeyword (keywords)
 
 notImplemented :: forall a b. a -> Doc b
@@ -16,49 +16,57 @@ notImplemented _ =  "<not implemented>"
 renderSQL :: Doc a -> Text
 renderSQL = renderStrict . layoutPretty defaultLayoutOptions
 
-renderScript :: Script -> Doc a
-renderScript (Script statements) = vsep $ fmap ((<>) line . renderStatement) statements
+class Executable a where
+  renderStatement :: a -> Text
 
-renderStatement :: Statement -> Doc a
-renderStatement Commit = "commit;"
-renderStatement RollBack = "rollback;"
-renderStatement StartTransaction = "start transaction;"
-renderStatement (QueryStatement q) = renderQuery q <> ";"
-renderStatement (SetUserVar n v) = "set" <+> "@" <> (pretty $ escapeIdentifier n) <+> "=" <+> renderExpr v <> ";"
-renderStatement (InsertValues {tableName, columns, values}) =
-  group $ vsep
-  [ "insert into"
-  , (group $ renderTableName tableName <> line <> (parens $ sep $ punctuate comma $ fmap renderColumnName columns))
-  , "values"
-  , (vsep $ punctuate comma $ fmap (parens . hsep . punctuate comma . fmap renderExpr) values)
-  ] <> ";"
+instance Executable SimpleStatement where
+  renderStatement Commit = "commit;"
+  renderStatement RollBack = "rollback;"
+  renderStatement StartTransaction = "start transaction;"
 
-renderStatement (InsertFrom {tableName, columns, queryExpr}) =
-  group $ vsep
-  [ "insert into"
-  , (group $ renderTableName tableName <> line <> (parens $ sep $ punctuate comma $ fmap renderColumnName columns))
-  , renderQuery queryExpr
-  ] <> ";"
+instance Executable SetUserVarStatement where
+  renderStatement (SetUserVarStatement n v) =
+    renderSQL $ "set" <+> "@" <> (pretty $ escapeIdentifier n) <+> "=" <+> renderExpr v <> ";"
 
-renderStatement (UpdateStatement (Update {tables, where_, set})) =
-  group $ "update"
-  <> line <> (sep $ punctuate comma $ fmap renderTableRef tables)
-  <> line <> "set"
-  <> line <> (sep $ punctuate comma $ fmap (\(col, val) -> renderColumnName col <+> "=" <+> renderExpr val) set)
-  <> renderWhere where_
-  <> ";"
+instance Executable InsertValuesStatement where
+  renderStatement (InsertValuesStatement {tableName, columns, values}) = renderSQL $
+    group $ vsep
+    [ "insert into"
+    , (group $ renderTableName tableName <> line <> (parens $ sep $ punctuate comma $ fmap renderColumnName columns))
+    , "values"
+    , (vsep $ punctuate comma $ fmap (parens . hsep . punctuate comma . fmap renderExpr) values)
+    ] <> ";"
 
-renderStatement (DeleteStatement (Delete {tableName, where_})) =
-  group $ "delete from"
-  <> line <> renderTableName tableName
-  <> renderWhere where_
-  <> ";"
+instance Executable InsertFromStatement where
+  renderStatement (InsertFromStatement {tableName, columns, queryExpr}) = renderSQL $
+    group $ vsep
+    [ "insert into"
+    , (group $ renderTableName tableName <> line <> (parens $ sep $ punctuate comma $ fmap renderColumnName columns))
+    , renderQuery queryExpr
+    ] <> ";"
 
-renderStatement (CreateTempTable {tableName, queryExpr}) =
-  group $ "create temporary table"
-  <> line <> renderTableName tableName
-  <> line <> renderQuery queryExpr
-  <> ";"
+instance Executable UpdateStatement where
+  renderStatement (UpdateStatement {tables, where_, set}) = renderSQL $
+    group $ "update"
+    <> line <> (sep $ punctuate comma $ fmap renderTableRef tables)
+    <> line <> "set"
+    <> line <> (sep $ punctuate comma $ fmap (\(col, val) -> renderColumnName col <+> "=" <+> renderExpr val) set)
+    <> renderWhere where_
+    <> ";"
+
+instance Executable DeleteStatement where
+  renderStatement (DeleteStatement {tableName, where_}) = renderSQL $
+    group $ "delete from"
+    <> line <> renderTableName tableName
+    <> renderWhere where_
+    <> ";"
+
+instance Executable CreateTempTableStatement where
+  renderStatement (CreateTempTableStatement {tableName, queryExpr}) = renderSQL $
+    group $ "create temporary table"
+    <> line <> renderTableName tableName
+    <> line <> renderQuery queryExpr
+    <> ";"
 
 renderAlias :: Alias -> Doc a
 renderAlias (Alias a) = pretty $ escapeIdentifier a

@@ -12,7 +12,7 @@ import Data.Tuple.Extra (fst3)
 import Database.MySQL.Simple.Types (Only(..))
 
 import UploadPlan (NamedValue(..), ColumnType, WorkbenchId(..), UploadPlan(..), MappingItem(..), UploadStrategy(..), ToManyRecord(..), ToMany(..), ToOne(..), UploadTable(..))
-import SQL (Statement, ColumnName(..), Alias, SelectTerm, TableRef, Expr, QueryExpr)
+import SQL (InsertFromStatement, ColumnName(..), Alias, SelectTerm, TableRef, Expr, QueryExpr)
 import MonadSQL (MonadSQL(..))
 import SQLSmart
  (insertFrom, rollback, union, createTempTable, startTransaction,  (<=>)
@@ -148,7 +148,7 @@ uploadLeafRecords up@(UploadPlan {uploadTable, workbenchId}) = do
     -- _a
   execute $ rollback
 
-insertNewRecords :: Text -> [Text] -> Statement
+insertNewRecords :: Text -> [Text] -> InsertFromStatement
 insertNewRecords tableName columns = insertFrom tableName (columns <> extraColumns) $
       query ((select . project <$> columns) <> (select <$> extraValues))
       `from` [table $ "newvalues_" <> tableName]

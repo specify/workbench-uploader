@@ -10,7 +10,7 @@ import qualified Database.MySQL.Simple as MySQL
 import Control.Monad (forM_)
 
 import SQLRender (renderQuery, renderSQL, renderStatement)
-import SQL (Statement(..), Alias, Alias, TableRef, Alias, Alias, Expr, QueryExpr)
+import SQL (Alias, Alias, TableRef, Alias, Alias, Expr, QueryExpr)
 import SQLSmart
  ( (<=>)
  , (@@)
@@ -73,10 +73,6 @@ parseMappingItem t (UP.MappingItem {id, columnName, columnType}) = MappingItem
   , selectFromWBas = columnName
   , tableColumn = columnName
   }
-
-
-remark :: Text -> Statement
-remark message = QueryStatement $ query [selectAs "Message" $ stringLit message]
 
 
 rowsWithValuesFor :: Expr -> QueryExpr
@@ -250,12 +246,4 @@ parseValue IdType value = nullIf value (stringLit "") `plus` (intLit 0)
 parseValue DecimalType value = nullIf value (stringLit "")
 parseValue (DateType format) value = strToDate value $ stringLit format
 
-
-execute :: Connection -> [Statement] -> IO ()
-execute conn statements =
-  forM_ statements $ \s -> MySQL.execute_ conn $ fromString $ unpack $ renderSQL $ renderStatement s
-
-
-runQuery :: (QueryResults r) => Connection -> QueryExpr -> IO [r]
-runQuery conn q = MySQL.query_ conn $ fromString $ unpack $ renderSQL $ renderQuery q
 

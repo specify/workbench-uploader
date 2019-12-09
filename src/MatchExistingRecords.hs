@@ -6,7 +6,7 @@ import Data.Maybe (fromMaybe)
 import Control.Monad (forM_)
 import Control.Newtype.Generics (unpack)
 
-import SQL (Statement(..))
+import SQL (UpdateStatement, DeleteStatement)
 import MonadSQL (MonadSQL, execute)
 import SQLSmart (in_, using, locate, update, scalarSubQuery, startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, inSubQuery, notInSubQuery, suchThat, row, (<=>), subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null, groupBy, max, delete)
 import UploadPlan (WorkbenchId(..), UploadPlan(..), columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..))
@@ -15,11 +15,11 @@ import Common (maybeApply, rowsWithValuesFor, rowsFromWB, joinToManys, toOneMapp
 
 clean :: MonadSQL m => UploadPlan -> m ()
 clean (UploadPlan {workbenchId, templateId}) = do
-  execute $ UpdateStatement $
+  execute $
     update [table "workbenchrow"] [("uploadstatus", intLit 0)]
     `suchThat` (project "workbenchid" `equal` (intLit $ unpack workbenchId))
 
-  execute $ DeleteStatement $
+  execute $
     delete "workbenchdataitem"
     `suchThat`
     ( project "workbenchtemplatemappingitemid" `inSubQuery`
@@ -36,7 +36,7 @@ matchExistingRecords :: MonadSQL m => UploadPlan -> m ()
 matchExistingRecords (UploadPlan {uploadTable, workbenchId}) = matchRecords workbenchId uploadTable
 
 skipDegenerateRecords :: MonadSQL m => WorkbenchId -> m ()
-skipDegenerateRecords (WorkbenchId workbenchId) = execute $ UpdateStatement $
+skipDegenerateRecords (WorkbenchId workbenchId) = execute $
   update
   [(table "workbenchrow" `as` r)
    `join` (table "workbenchdataitem" `as` i)
@@ -56,7 +56,7 @@ skipDegenerateRecords (WorkbenchId workbenchId) = execute $ UpdateStatement $
     mi = alias "mi"
 
 useFirst :: MonadSQL m => UploadTable -> m ()
-useFirst (UploadTable {idMapping}) = execute $ UpdateStatement $
+useFirst (UploadTable {idMapping}) = execute $
   update
   [(table "workbenchdataitem" `as` i)
   `join` (table "workbenchtemplatemappingitem" `as` mi)

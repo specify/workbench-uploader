@@ -22,7 +22,7 @@ import SQLSmart (intLit)
 import ExamplePlan (uploadPlan)
 import AugmentPlan (augmentPlan)
 import UploadPlan (WorkbenchId(..), UploadPlan(..))
-import Common (runQuery, showWB)
+import Common (showWB)
 import MatchExistingRecords (matchExistingRecords, clean)
 import MatchRecords (uploadLeafRecords, matchLeafRecords)
 
@@ -32,7 +32,7 @@ type UploadMonad = ReaderT Env IO
 
 instance MonadSQL UploadMonad where
   execute stmt = do
-    let sql = renderSQL $ renderStatement stmt
+    let sql = renderStatement stmt
     log sql
     Env conn <- ask
     _ <- lift $ MySQL.execute_ conn $ fromString $ unpack $ sql
@@ -68,10 +68,9 @@ runDB dbName sql = do
 
 doPrint :: [String] -> IO ()
 doPrint (planFile : _) = do
-  conn <- connectTo "bishop"
   decoded <- eitherDecode <$> readFile planFile
   case decoded of
-    Right plan -> printWB conn plan
+    Right plan -> runDB "bishop" $ printWB plan
     Left err -> fail $ "couldn't parse json:" <> err
 doPrint _ = fail "missing plan file"
 
@@ -115,7 +114,7 @@ printPlan = putStrLn . decodeUtf8 . toStrict . encodePretty
 connectTo :: String -> IO Connection
 connectTo dbName = connect defaultConnectInfo {connectDatabase=dbName, connectUser="Master", connectPassword="Master"}
 
-printWB :: Connection -> UploadPlan -> IO ()
-printWB conn (UploadPlan {workbenchId=WorkbenchId wbid}) = do
-  rows  :: [(Integer, Text)] <- runQuery conn $ showWB (intLit wbid)
-  forM_ rows $ \(_, cols) -> putStrLn cols
+printWB :: MonadSQL m => UploadPlan -> m ()
+printWB (UploadPlan {workbenchId=WorkbenchId wbid}) = do
+  rows  :: [(Integer, Text)] <- doQuery $ showWB (intLit wbid)
+  forM_ rows $ \(_, cols) -> log cols

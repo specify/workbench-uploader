@@ -2,23 +2,18 @@ module SQL where
 
 import Data.Text
 
-newtype Script = Script [Statement]
 
-
-data Statement
-  = QueryStatement QueryExpr
-  | InsertValues { tableName :: TableName, columns :: [ColumnName], values :: [[Expr]] }
-  | InsertFrom  { tableName :: TableName, columns :: [ColumnName], queryExpr :: QueryExpr }
-  | DeleteStatement DeleteStatement
-  | UpdateStatement UpdateStatement
-  | CreateTempTable { tableName :: TableName, queryExpr :: QueryExpr }
-  | StartTransaction
+data SimpleStatement
+  = StartTransaction
   | Commit
   | RollBack
-  | SetUserVar Text Expr
 
-data UpdateStatement = Update { tables :: [TableRef], where_ :: Maybe Expr, set :: [(ColumnName, Expr)] }
-data DeleteStatement = Delete  { tableName :: TableName, where_ :: Maybe Expr }
+data UpdateStatement = UpdateStatement { tables :: [TableRef], where_ :: Maybe Expr, set :: [(ColumnName, Expr)] }
+data DeleteStatement = DeleteStatement  { tableName :: TableName, where_ :: Maybe Expr }
+data InsertValuesStatement = InsertValuesStatement { tableName :: TableName, columns :: [ColumnName], values :: [[Expr]] }
+data InsertFromStatement = InsertFromStatement  { tableName :: TableName, columns :: [ColumnName], queryExpr :: QueryExpr }
+data CreateTempTableStatement = CreateTempTableStatement { tableName :: TableName, queryExpr :: QueryExpr }
+data SetUserVarStatement = SetUserVarStatement Text Expr
 
 data QueryExpr = Select SelectExpr | Union SelectExpr QueryExpr
 
