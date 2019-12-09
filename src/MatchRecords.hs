@@ -45,7 +45,7 @@ import SQLSmart
  , selectAs
  , strToDate
  , stringLit
- , suchThat
+ , when
  , table
  , using
  )
@@ -173,7 +173,7 @@ newValuesFromWB wbId idMappingId descriptors =
           `and` (idCol @@ "celldata" `equal` (stringLit "new"))
          )
   ]
-  `suchThat`
+  `when`
   (((r @@ "workbenchid") `equal` wbId) `and` (r @@ "uploadstatus" `equal` intLit 0))
   `having`
   (not $ (row $ project . fst3 <$> wbCols) <=> (row $ null <$ wbCols))

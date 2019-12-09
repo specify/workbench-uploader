@@ -42,7 +42,7 @@ import SQLSmart
  , selectAs
  , strToDate
  , stringLit
- , suchThat
+ , when
  , table
  , using
  )
@@ -175,7 +175,7 @@ rowsFromWB wbId mappingItems excludeRows =
   query (imap selectWBVal mappingItems <> [select $ r @@ "workbenchrowid", select $ r @@ "rownumber"])
   `from`
   [ ifoldl joinWBCell (table "workbenchrow" `as` r) mappingItems ]
-  `suchThat`
+  `when`
   (((r @@ "workbenchid") `equal` wbId)
    `and` (r @@ "uploadstatus" `equal` intLit 0)
    `and` ((r @@ "workbenchrowid") `notInSubQuery` excludeRows)
@@ -199,7 +199,7 @@ valuesFromWB wbId mappingItems excludeRows =
   queryDistinct (imap selectWBVal mappingItems)
   `from`
   [ ifoldl joinWBCell (table "workbenchrow" `as` r) mappingItems ]
-  `suchThat`
+  `when`
   (((r @@ "workbenchid") `equal` wbId)
    `and` (r @@ "uploadstatus" `equal` intLit 0)
    `and` ((r @@ "workbenchrowid") `notInSubQuery` excludeRows)
@@ -229,7 +229,7 @@ showWB wbId =
    `join` (table "workbenchtemplatemappingitem" `as` m) `using` ["workbenchtemplateid"]
    `leftJoin` (table "workbenchdataitem" `as` i) `using` ["workbenchrowid", "workbenchtemplatemappingitemid"]
   ]
-  `suchThat`
+  `when`
   ((r @@ "workbenchid" `equal` wbId) `and` (r @@ "uploadstatus" `equal` (intLit 0)))
   `groupBy` [r @@ "workbenchrowid"]
   `orderBy` [asc $ r @@ "rownumber"]

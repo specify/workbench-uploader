@@ -6,7 +6,7 @@ import qualified SQL
 
 
 class Whereable a where
-  suchThat :: a -> Expr -> a
+  when :: a -> Expr -> a
 
 class Orderable a where
   orderBy :: a -> [OrderTerm] -> a
@@ -28,14 +28,15 @@ delete :: Text -> DeleteStatement
 delete tableName = DeleteStatement { tableName = TableName tableName, where_ = Nothing }
 
 instance Whereable DeleteStatement where
-  suchThat delete when = delete { where_ = Just when }
+  when stmt expr = stmt { where_ = Just expr }
 
 update :: [TableRef] -> [(Text, Expr)] -> UpdateStatement
 update tables set =
   UpdateStatement { tables = tables, where_ = Nothing, set = fmap (\(col, val) -> (ColumnName col, val)) set}
 
 instance Whereable UpdateStatement where
-  suchThat update when = update { where_ = Just when }
+  when stmt expr = stmt { where_ = Just expr }
+
 
 distinct :: QueryExpr -> QueryExpr
 distinct (Select s) = Select $ s { selectType = SelectDistinct }
@@ -113,7 +114,7 @@ as t a = case t of
       NaturalRightJoin l r -> NaturalRightJoin l (r `as` a')
 
 instance Whereable QueryExpr where
-  suchThat (Select s) expr = Select $ s { where_ = Just expr }
+  when (Select s) expr = Select $ s { where_ = Just expr }
 
 having :: QueryExpr -> Expr -> QueryExpr
 having (Select s) expr = Select $ s { SQL.having = Just expr }

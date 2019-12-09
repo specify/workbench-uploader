@@ -8,7 +8,7 @@ import Control.Newtype.Generics (unpack)
 
 import SQL (UpdateStatement, DeleteStatement)
 import MonadSQL (MonadSQL, execute)
-import SQLSmart (in_, using, locate, update, scalarSubQuery, startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, inSubQuery, notInSubQuery, suchThat, row, (<=>), subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null, groupBy, max, delete)
+import SQLSmart (in_, using, locate, update, scalarSubQuery, startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, inSubQuery, notInSubQuery, when, row, (<=>), subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null, groupBy, max, delete)
 import UploadPlan (WorkbenchId(..), UploadPlan(..), columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..))
 import Common (maybeApply, rowsWithValuesFor, rowsFromWB, joinToManys, toOneMappingItems, toManyMappingItems, strategyToWhereClause, parseMappingItem, MappingItem(..))
 
@@ -17,15 +17,15 @@ clean :: MonadSQL m => UploadPlan -> m ()
 clean (UploadPlan {workbenchId, templateId}) = do
   execute $
     update [table "workbenchrow"] [("uploadstatus", intLit 0)]
-    `suchThat` (project "workbenchid" `equal` (intLit $ unpack workbenchId))
+    `when` (project "workbenchid" `equal` (intLit $ unpack workbenchId))
 
   execute $
     delete "workbenchdataitem"
-    `suchThat`
+    `when`
     ( project "workbenchtemplatemappingitemid" `inSubQuery`
       ( query [ select $ project "workbenchtemplatemappingitemid" ]
         `from` [table "workbenchtemplatemappingitem"]
-        `suchThat` (
+        `when` (
           (project "metadata" `equal` stringLit "generated")
           `and` (project "workbenchtemplateid" `equal` (intLit $ unpack templateId))
           )
@@ -63,7 +63,7 @@ useFirst (UploadTable {idMapping}) = execute $
   `using` ["workbenchtemplatemappingitemid"]
   ]
   [("celldata", rawExpr "left(celldata, locate(',', celldata) - 1)")]
-  `suchThat`
+  `when`
   ((locate (stringLit ",") $ project "celldata") `and` (project "workbenchtemplatemappingitemid" `equal` wbtmiId))
   where
     i = alias "i"
@@ -136,7 +136,7 @@ findExistingRecords (WorkbenchId wbId) ut@(UploadTable {tableName, idColumn, str
   where
     t = alias "t"
     wb = alias "wb"
-    st = maybeApply suchThat
+    st = maybeApply when
     mappingItems' = fmap (parseMappingItem t) mappingItems <> toOneMappingItems ut t <> toManyMappingItems ut
     valuesFromWB = row $ fmap (\(MappingItem {selectFromWBas}) -> wb @@ selectFromWBas) mappingItems'
     valuesFromTable = row $ fmap (\(MappingItem {tableAlias, tableColumn}) -> tableAlias @@ tableColumn) mappingItems'
