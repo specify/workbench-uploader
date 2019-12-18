@@ -15,7 +15,7 @@ import UploadPlan (NamedValue(..), ColumnType, WorkbenchId(..), UploadPlan(..), 
 import SQL (InsertFromStatement, ColumnName(..), Alias, SelectTerm, TableRef, Expr, QueryExpr)
 import MonadSQL (MonadSQL(..))
 import SQLSmart
- (insertFrom, rollback, union, createTempTable, startTransaction,  (<=>)
+ ((@=), userVar, update, setUserVar, insertFrom, rollback, union, createTempTable, startTransaction,  (<=>)
  , (@@)
  , alias
  , and
@@ -142,10 +142,13 @@ uploadLeafRecords up@(UploadPlan {uploadTable, workbenchId}) = do
     let queries = (\ut -> valuesFromWB workbenchId ut (columnDescriptorsForTable columns ut)) <$> group
     execute $ createTempTable ("newvalues_" <> tableName) $ foldl1 union queries
     execute $ insertNewRecords tableName columns
-    -- lastInsert <- doQuery (query [select $ rawExpr "last_insert_id()"])
-    -- let lastInsertId = case lastInsert of
-    --       [Only id] -> id :: Int
-    -- _a
+    execute $ setUserVar "new_id" $ rawExpr "last_insert_id()"
+    execute $ setUserVar "row_number" $ intLit (-1)
+    execute $ update [table $ "newvalues_" <> tableName]
+      [("idForUpload", ("row_number" @= (userVar "row_number" `plus` intLit 1))
+                       `plus` (userVar "new_id"))
+      ]
+      `orderBy` (asc . project <$> columns)
   execute $ rollback
 
 insertNewRecords :: Text -> [Text] -> InsertFromStatement
@@ -164,7 +167,7 @@ valuesFromWB (WorkbenchId wbId) (UploadTable {idMapping}) descriptors =
 
 newValuesFromWB :: Expr -> Expr -> [ColumnDescriptor] -> QueryExpr
 newValuesFromWB wbId idMappingId descriptors =
-  queryDistinct ((selectAs "idForUpload" null) : (selectWBVal <$> descriptors))
+  queryDistinct ((selectAs "idForUpload" $ intLit 0) : (selectWBVal <$> descriptors))
   `from`
   [ L.foldl joinWBCell (table "workbenchrow" `as` r) wbCols
     `join` (table "workbenchdataitem" `as` idCol)
