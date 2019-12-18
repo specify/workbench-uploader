@@ -50,7 +50,7 @@ instance Executable UpdateStatement where
     group $ "update"
     <> line <> (sep $ punctuate comma $ fmap renderTableRef tables)
     <> line <> "set"
-    <> line <> (sep $ punctuate comma $ fmap (\(col, val) -> renderColumnName col <+> "=" <+> renderExpr val) set)
+    <> line <> (sep $ punctuate comma $ fmap (\(col, val) -> renderExpr col <+> "=" <+> renderExpr val) set)
     <> renderWhere where_
     <> renderOrderBy ordering
     <> ";"

@@ -16,7 +16,7 @@ import Common (maybeApply, rowsWithValuesFor, rowsFromWB, joinToManys, toOneMapp
 clean :: MonadSQL m => UploadPlan -> m ()
 clean (UploadPlan {workbenchId, templateId}) = do
   execute $
-    update [table "workbenchrow"] [("uploadstatus", intLit 0)]
+    update [table "workbenchrow"] [(project "uploadstatus", intLit 0)]
     `when` (project "workbenchid" `equal` (intLit $ unpack workbenchId))
 
   execute $
@@ -49,7 +49,7 @@ skipDegenerateRecords (WorkbenchId workbenchId) = execute $
           `and` (mi @@ "metadata" `equal` (stringLit "generated"))
         )
   ]
-  [("uploadstatus", intLit 1)]
+  [(project "uploadstatus", intLit 1)]
   where
     r = alias "r"
     i = alias "i"
@@ -62,7 +62,7 @@ useFirst (UploadTable {idMapping}) = execute $
   `join` (table "workbenchtemplatemappingitem" `as` mi)
   `using` ["workbenchtemplatemappingitemid"]
   ]
-  [("celldata", rawExpr "left(celldata, locate(',', celldata) - 1)")]
+  [(project "celldata", rawExpr "left(celldata, locate(',', celldata) - 1)")]
   `when`
   ((locate (stringLit ",") $ project "celldata") `and` (project "workbenchtemplatemappingitemid" `equal` wbtmiId))
   where

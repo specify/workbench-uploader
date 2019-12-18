@@ -4,6 +4,7 @@ import Data.Text (Text)
 import Prelude ((<$), fst, (.), const, Int, head, foldl1, (<$>), Maybe(..), pure, ($), (==), undefined, (<>), fmap, maybe)
 import Control.Monad (forM_)
 import Control.Newtype.Generics (unpack)
+import Control.Applicative (empty)
 import Data.Maybe (isJust, catMaybes, fromMaybe)
 import Data.List.Index (ifoldl, imap)
 import qualified Data.List as L
@@ -12,7 +13,7 @@ import Data.Tuple.Extra (fst3)
 import Database.MySQL.Simple.Types (Only(..))
 
 import UploadPlan (NamedValue(..), ColumnType, WorkbenchId(..), UploadPlan(..), MappingItem(..), UploadStrategy(..), ToManyRecord(..), ToMany(..), ToOne(..), UploadTable(..))
-import SQL (InsertFromStatement, ColumnName(..), Alias, SelectTerm, TableRef, Expr, QueryExpr)
+import SQL (UpdateStatement, InsertFromStatement, ColumnName(..), Alias, SelectTerm, TableRef, Expr, QueryExpr)
 import MonadSQL (MonadSQL(..))
 import SQLSmart
  ((@=), userVar, update, setUserVar, insertFrom, rollback, union, createTempTable, startTransaction,  (<=>)
@@ -21,6 +22,7 @@ import SQLSmart
  , and
  , as
  , asc
+ , concat
  , equal
  , floatLit
  , from
@@ -134,7 +136,6 @@ matchLeafRecords up@(UploadPlan {uploadTable, workbenchId}) = do
 
 uploadLeafRecords :: MonadSQL m => UploadPlan -> m ()
 uploadLeafRecords up@(UploadPlan {uploadTable, workbenchId}) = do
-  execute $ startTransaction
   let groups = uploadGroups uploadTable
   forM_ groups $ \group -> do
     let UploadTable {tableName} = head group
@@ -145,11 +146,68 @@ uploadLeafRecords up@(UploadPlan {uploadTable, workbenchId}) = do
     execute $ setUserVar "new_id" $ rawExpr "last_insert_id()"
     execute $ setUserVar "row_number" $ intLit (-1)
     execute $ update [table $ "newvalues_" <> tableName]
-      [("idForUpload", ("row_number" @= (userVar "row_number" `plus` intLit 1))
-                       `plus` (userVar "new_id"))
+      [(project "idForUpload"
+       , ("row_number" @= (userVar "row_number" `plus` intLit 1))
+         `plus` (userVar "new_id"))
       ]
       `orderBy` (asc . project <$> columns)
-  execute $ rollback
+    forM_ group $ \ut -> do
+      execute $ matchNewRecords workbenchId ut (columnDescriptorsForTable columns ut)
+
+matchNewRecords :: WorkbenchId -> UploadTable -> [ColumnDescriptor] -> UpdateStatement
+matchNewRecords (WorkbenchId wbId) (UploadTable {idMapping, tableName}) descriptors =
+  update
+    [ (table "workbenchdataitem" `as` idCol)
+      `join` (table "workbenchrow" `as` r)
+      `on` (idCol @@ "workbenchrowid" `equal` (r @@ "workbenchrowid"))
+      `joinWBCols` wbCols
+      `join` (table ("newvalues_" <> tableName) `as` tempTable)
+      `on` ( row newVals <=> row wbVals )
+    ]
+    [(idCol @@ "celldata", concat [stringLit "uploaded", tempTable @@ "idForUpload"])]
+    `when`
+    (((r @@ "workbenchid") `equal` intLit wbId)
+      `and` (r @@ "uploadstatus" `equal` intLit 0)
+      `and` (idCol @@ "workbenchtemplatemappingitemid" `equal` idMappingId)
+      `and` (idCol @@ "celldata" `equal` (stringLit "new"))
+    )
+
+  where
+    idCol = alias "idcol"
+    r = alias "r"
+    c i = alias $ "c" <> (Common.show i)
+    tempTable = alias "tempTable"
+
+    idMappingId = maybe null intLit idMapping
+
+    newVals = do
+      ColumnDescriptor {colName, colSource} <- descriptors
+      case colSource of
+        WBValue _ -> pure $ tempTable @@ colName
+        _ -> empty
+
+    wbCols = do
+      ColumnDescriptor {colName, position=i, colSource} <- descriptors
+      case colSource of
+        WBValue (mappingId, _) -> pure (colName, i, mappingId)
+        _ -> empty
+
+    wbVals = do
+      ColumnDescriptor {position=i, colSource} <- descriptors
+      case colSource of
+        WBValue (_, colType) -> pure $ parseValue colType ((c i) @@ "celldata")
+        _ -> empty
+
+    joinWBCols = L.foldl joinWBCell
+
+    joinWBCell :: TableRef -> (Text, Int, Int) -> TableRef
+    joinWBCell left (_, i, mappingId) =
+      left `leftJoin` (table "workbenchdataitem" `as` c i)
+      `on`
+      ( ((c i @@ "workbenchrowid") `equal` (r @@ "workbenchrowid"))
+        `and` (((c i) @@ "workbenchtemplatemappingitemid") `equal` (intLit mappingId))
+      )
+
 
 insertNewRecords :: Text -> [Text] -> InsertFromStatement
 insertNewRecords tableName columns = insertFrom tableName (columns <> extraColumns) $
@@ -159,7 +217,6 @@ insertNewRecords tableName columns = insertFrom tableName (columns <> extraColum
   where
     extraColumns = ["version", "timestampcreated", "guid"]
     extraValues = rawExpr <$> ["0", "now()", "uuid()"]
-
 
 valuesFromWB :: WorkbenchId -> UploadTable -> [ColumnDescriptor] -> QueryExpr
 valuesFromWB (WorkbenchId wbId) (UploadTable {idMapping}) descriptors =
@@ -204,33 +261,3 @@ newValuesFromWB wbId idMappingId descriptors =
       ( ((c i @@ "workbenchrowid") `equal` (r @@ "workbenchrowid"))
         `and` (((c i) @@ "workbenchtemplatemappingitemid") `equal` (intLit mappingId))
       )
-
-
--- findNewRecords :: Expr -> UploadTable -> [Statement]
--- findNewRecords wbTemplateMappingItemId ut@(UploadTable {idColumn, mappingItems}) =
---   [ setUserVar "new_id" $ rawExpr "last_insert_id()"
---   , setUserVar "row_number" $ intLit 0
---   , UpdateStatement $ update
---     [ (table "workbenchdataitem")
---       `join`
---       (subqueryAs wbRow $ rowsFromWB (userVar "workbenchid") mappingItems' excludeRows) `using` ["workbenchrowid"]
---       `join`
---       (subqueryAs valuesWithId $
---        query
---        [ selectAs idColumn $ (userVar "row_number") `plus` (userVar "new_id")
---        , select $ "row_number" @= ((userVar "row_number") `plus` (intLit 1))
---        , starFrom newValues
---        ] `from`
---        [ subqueryAs newValues $ valuesFromWB (userVar "workbenchid") mappingItems' excludeRows ]
---       ) `on` ( newVals <=> wbVals )
---     ]
---     [("celldata", valuesWithId @@ idColumn)]
---   ]
---   where
---     t = alias "t"
---     wbRow = alias "wbrow"
---     newValues = alias "newvalues"
---     valuesWithId = alias "valueswithid"
---     mappingItems' = fmap (parseMappingItem t) mappingItems <> toOneMappingItems ut t <> toManyMappingItems ut
---     newVals = row $ fmap (\(MappingItem {selectFromWBas}) -> valuesWithId @@ selectFromWBas) mappingItems'
---     wbVals = row $ fmap (\(MappingItem {selectFromWBas}) -> wbRow @@ selectFromWBas) mappingItems'

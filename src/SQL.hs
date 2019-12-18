@@ -12,7 +12,7 @@ data SimpleStatement
 data UpdateStatement = UpdateStatement
   { tables :: [TableRef]
   , where_ :: Maybe Expr
-  , set :: [(ColumnName, Expr)]
+  , set :: [(Expr, Expr)]
   , ordering :: [OrderTerm]
   }
 

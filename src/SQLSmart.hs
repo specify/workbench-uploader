@@ -30,12 +30,12 @@ delete tableName = DeleteStatement { tableName = TableName tableName, where_ = N
 instance Whereable DeleteStatement where
   when stmt expr = stmt { where_ = Just expr }
 
-update :: [TableRef] -> [(Text, Expr)] -> UpdateStatement
+update :: [TableRef] -> [(Expr, Expr)] -> UpdateStatement
 update tables set = UpdateStatement
   { tables = tables
   , where_ = Nothing
   , ordering = []
-  , set = fmap (\(col, val) -> (ColumnName col, val)) set}
+  , set = fmap (\(col, val) -> (col, val)) set}
 
 instance Whereable UpdateStatement where
   when stmt expr = stmt { where_ = Just expr }

@@ -18,7 +18,7 @@ import qualified Database.MySQL.Simple as MySQL
 
 import MonadSQL (MonadSQL(..))
 import SQLRender (renderQuery, renderStatement, renderSQL)
-import SQLSmart (intLit)
+import SQLSmart (intLit, rollback, startTransaction)
 import ExamplePlan (uploadPlan)
 import AugmentPlan (augmentPlan)
 import UploadPlan (WorkbenchId(..), UploadPlan(..))
@@ -95,7 +95,11 @@ doUpload :: [String] -> IO ()
 doUpload (inFile : _) = do
   decoded <- eitherDecode <$> readFile inFile
   case decoded of
-    Right plan -> runDB "bishop" $ uploadLeafRecords plan
+    Right plan -> runDB "bishop" $ do
+      execute $ startTransaction
+      uploadLeafRecords plan
+      printWB plan
+      execute $ rollback
     Left err -> fail $ "couldn't parse json:" <> err
 doUpload _ = fail "expected inFile"
 
