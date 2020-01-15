@@ -1,16 +1,14 @@
-module MatchExistingRecords (matchExistingRecords, clean, findExistingRecords, useFirst, flagNewRecords) where
+module MatchExistingRecords (clean, flagNewRecords, useFirst, findExistingRecords) where
 
-import Prelude ((<$>), fmap, (<>), ($))
+import Prelude (foldl, (<$>), fmap, (<>), ($))
 
 import Data.Maybe (fromMaybe)
-import Control.Monad (forM_)
 import Control.Newtype.Generics (unpack)
 
-import SQL (UpdateStatement, DeleteStatement)
 import MonadSQL (MonadSQL, execute)
-import SQLSmart (in_, using, locate, update, scalarSubQuery, startTransaction, rollback, insertValues, (@=), project, asc, orderBy, queryDistinct, stringLit, strToDate, nullIf, floatLit, leftJoin, inSubQuery, notInSubQuery, when, row, (<=>), subqueryAs, starFrom, plus, selectAs, insertFrom, setUserVar, rawExpr, alias, and, as, equal, (@@), on, table, join, from, select, query, intLit, having, not, null, groupBy, max, delete)
-import UploadPlan (WorkbenchId(..), UploadPlan(..), columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..))
-import Common (maybeApply, rowsWithValuesFor, rowsFromWB, joinToManys, toOneMappingItems, toManyMappingItems, strategyToWhereClause, parseMappingItem, MappingItem(..))
+import SQLSmart
+import UploadPlan (WorkbenchId(..), UploadPlan(..), UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..))
+import Common (rowsWithValuesFor, rowsFromWB, joinToManys, toOneMappingItems, toManyMappingItems, strategyToWhereClause, parseMappingItem, MappingItem(..))
 
 
 clean :: MonadSQL m => UploadPlan -> m ()
@@ -32,28 +30,6 @@ clean (UploadPlan {workbenchId, templateId}) = do
       )
     )
 
-matchExistingRecords :: MonadSQL m => UploadPlan -> m ()
-matchExistingRecords (UploadPlan {uploadTable, workbenchId}) = matchRecords workbenchId uploadTable
-
-skipDegenerateRecords :: MonadSQL m => WorkbenchId -> m ()
-skipDegenerateRecords (WorkbenchId workbenchId) = execute $
-  update
-  [(table "workbenchrow" `as` r)
-   `join` (table "workbenchdataitem" `as` i)
-   `on` ( ((r @@ "workbenchrowid") `equal` (i @@ "workbenchrowid"))
-          `and` (r @@ "workbenchid" `equal` (intLit workbenchId))
-          `and` (locate (stringLit ",") $ i @@ "celldata" )
-        )
-   `join` (table "workbenchtemplatemappingitem" `as` mi)
-   `on` ( (i @@ "workbenchtemplatemappingitemid" `equal` (mi @@ "workbenchtemplatemappingitemid"))
-          `and` (mi @@ "metadata" `equal` (stringLit "generated"))
-        )
-  ]
-  [(project "uploadstatus", intLit 1)]
-  where
-    r = alias "r"
-    i = alias "i"
-    mi = alias "mi"
 
 useFirst :: MonadSQL m => UploadTable -> m ()
 useFirst (UploadTable {idMapping}) = execute $
@@ -69,40 +45,6 @@ useFirst (UploadTable {idMapping}) = execute $
     i = alias "i"
     mi = alias "mi"
     wbtmiId = fromMaybe null $ intLit <$> idMapping
-
-matchRecords :: MonadSQL m => WorkbenchId -> UploadTable -> m ()
-matchRecords wbId uploadTable = do
-  matchToOnes wbId uploadTable
-  matchToManys wbId uploadTable
-
-  findExistingRecords wbId uploadTable
-  useFirst uploadTable
-  flagNewRecords wbId uploadTable
-
-matchToManys :: MonadSQL m => WorkbenchId -> UploadTable -> m ()
-matchToManys wbId ut = do
-  forM_ (toManyTables ut) $ \(ToMany {records}) ->
-    forM_ records $ \(ToManyRecord {toOneTables}) ->
-      forM_ toOneTables $ \toOne -> matchToManyToOne wbId toOne
-
-matchToManyToOne :: MonadSQL m => WorkbenchId -> ToOne -> m ()
-matchToManyToOne wbId (ToOne {toOneTable}) = do
-  matchToOnes wbId toOneTable
-  matchToManys wbId toOneTable
-
-  findExistingRecords wbId toOneTable
-  useFirst toOneTable
-  flagNewRecords wbId toOneTable
-
-matchToOnes :: MonadSQL m => WorkbenchId -> UploadTable -> m ()
-matchToOnes wbId (UploadTable {toOneTables}) =
-  forM_ toOneTables $ \(ToOne {toOneTable}) -> do
-    matchToOnes wbId toOneTable
-    matchToManys wbId toOneTable
-
-    findExistingRecords wbId toOneTable
-    useFirst toOneTable
-    flagNewRecords wbId toOneTable
 
 flagNewRecords :: MonadSQL m => WorkbenchId -> UploadTable -> m ()
 flagNewRecords (WorkbenchId wbId) ut@(UploadTable {mappingItems, idMapping}) =
@@ -136,7 +78,7 @@ findExistingRecords (WorkbenchId wbId) ut@(UploadTable {tableName, idColumn, str
   where
     t = alias "t"
     wb = alias "wb"
-    st = maybeApply when
+    st = foldl when
     mappingItems' = fmap (parseMappingItem t) mappingItems <> toOneMappingItems ut t <> toManyMappingItems ut
     valuesFromWB = row $ fmap (\(MappingItem {selectFromWBas}) -> wb @@ selectFromWBas) mappingItems'
     valuesFromTable = row $ fmap (\(MappingItem {tableAlias, tableColumn}) -> tableAlias @@ tableColumn) mappingItems'

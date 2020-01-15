@@ -23,7 +23,7 @@ import ExamplePlan (uploadPlan)
 import AugmentPlan (augmentPlan)
 import UploadPlan (WorkbenchId(..), UploadPlan(..))
 import Common (showWB)
-import MatchExistingRecords (matchExistingRecords, clean)
+import MatchExistingRecords (clean)
 import MatchRecords (uploadLeafRecords, matchLeafRecords)
 
 data Env = Env {conn :: Connection}

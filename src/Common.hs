@@ -1,15 +1,9 @@
 module Common where
 
-import Data.String (fromString)
-import Data.Text (pack, unpack, Text)
+import Data.Text (pack, Text)
 import Data.List.Index (ifoldl, imap)
-import Data.Maybe (fromMaybe, catMaybes)
-import Database.MySQL.Simple.QueryResults (QueryResults)
-import Database.MySQL.Simple (Connection)
-import qualified Database.MySQL.Simple as MySQL
-import Control.Monad (forM_)
+import Data.Maybe (fromMaybe)
 
-import SQLRender (renderQuery, renderSQL, renderStatement)
 import SQL (Alias, Alias, TableRef, Alias, Alias, Expr, QueryExpr)
 import SQLSmart
  ( (<=>)
@@ -49,7 +43,7 @@ import SQLSmart
 import qualified UploadPlan as UP
 import UploadPlan (columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..))
 
-import Prelude ((<$>), IO, const, Show, foldl, fmap, Int, (<>), (.), Maybe(..), ($))
+import Prelude ((<$>), const, Show, foldl, fmap, Int, (<>), (.), Maybe(..), ($))
 import qualified Prelude
 
 
@@ -90,13 +84,6 @@ rowsWithValuesFor workbenchtemplatemappingitemid =
   where
     r = alias "exclude"
     d = alias "d"
-
-
-maybeApply :: forall a b. (a -> b -> a) -> a -> Maybe b -> a
-maybeApply f a mb =
-  case mb of
-    Just b -> f a b
-    Nothing -> a
 
 
 strategyToWhereClause :: UploadStrategy -> Alias -> Maybe Expr

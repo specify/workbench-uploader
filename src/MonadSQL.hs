@@ -1,4 +1,4 @@
-module MonadSQL where
+module MonadSQL (MonadSQL(..), logQuery, logStatement) where
 
 import Prelude (($), Monad)
 import Data.Text

@@ -1,19 +1,15 @@
-module MatchRecords where
+module MatchRecords (uploadLeafRecords, matchLeafRecords) where
 
 import Data.Text (Text)
-import Prelude ((<$), fst, (.), const, Int, head, foldl1, (<$>), Maybe(..), pure, ($), (==), undefined, (<>), fmap, maybe)
+import Prelude ((<$), (.), Int, head, foldl1, (<$>), Maybe(..), pure, ($), (==), undefined, (<>), maybe)
 import Control.Monad (forM_)
-import Control.Newtype.Generics (unpack)
 import Control.Applicative (empty)
-import Data.Maybe (isJust, catMaybes, fromMaybe)
-import Data.List.Index (ifoldl, imap)
 import qualified Data.List as L
 import qualified Data.List.Extra as L
 import Data.Tuple.Extra (fst3)
-import Database.MySQL.Simple.Types (Only(..))
 
 import UploadPlan (NamedValue(..), ColumnType, WorkbenchId(..), UploadPlan(..), MappingItem(..), UploadStrategy(..), ToManyRecord(..), ToMany(..), ToOne(..), UploadTable(..))
-import SQL (UpdateStatement, InsertFromStatement, ColumnName(..), Alias, SelectTerm, TableRef, Expr, QueryExpr)
+import SQL (UpdateStatement, InsertFromStatement, TableRef, Expr, QueryExpr)
 import MonadSQL (MonadSQL(..))
 import SQLSmart
  ((@=), userVar, update, setUserVar, insertFrom, rollback, union, createTempTable, startTransaction,  (<=>)
@@ -52,9 +48,8 @@ import SQLSmart
  , using
  )
 import MatchExistingRecords (flagNewRecords, useFirst, findExistingRecords)
-import Common (tableColumn, mappingId, parseValue, selectFromWBas, parseMappingItem)
 import qualified Common
-
+import Common (parseValue)
 
 data ColumnDescriptor = ColumnDescriptor
   { colName :: Text
@@ -112,7 +107,8 @@ leafTablesFromToManys toManys = do
   ToManyRecord {mappingItems, staticValues, toOneTables} <- records
   case toOneTables of
     [] -> [ UploadTable
-            { tableName = toManyTable
+            { metaValues = undefined
+            , tableName = toManyTable
             , idColumn = undefined
             , idMapping = Nothing
             , strategy = AlwaysCreate
@@ -126,16 +122,16 @@ leafTablesFromToManys toManys = do
 
 
 matchLeafRecords :: MonadSQL m => UploadPlan -> m ()
-matchLeafRecords up@(UploadPlan {uploadTable, workbenchId}) = do
+matchLeafRecords UploadPlan {uploadTable, workbenchId} = do
   let groups = uploadGroups uploadTable
   forM_ groups $ \group -> do
-    forM_ group $ \table -> do
-      findExistingRecords workbenchId table
-      useFirst table
-      flagNewRecords workbenchId table
+    forM_ group $ \t -> do
+      findExistingRecords workbenchId t
+      useFirst t
+      flagNewRecords workbenchId t
 
 uploadLeafRecords :: MonadSQL m => UploadPlan -> m ()
-uploadLeafRecords up@(UploadPlan {uploadTable, workbenchId}) = do
+uploadLeafRecords UploadPlan {uploadTable, workbenchId} = do
   let groups = uploadGroups uploadTable
   forM_ groups $ \group -> do
     let UploadTable {tableName} = head group
