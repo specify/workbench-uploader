@@ -12,41 +12,6 @@ import UploadPlan (NamedValue(..), ColumnType, WorkbenchId(..), UploadPlan(..), 
 import SQL (UpdateStatement, InsertFromStatement, TableRef, Expr, QueryExpr)
 import MonadSQL (MonadSQL(..))
 import SQLSmart
- ((@=), userVar, update, setUserVar, insertFrom, rollback, union, createTempTable, startTransaction,  (<=>)
- , (@@)
- , alias
- , and
- , as
- , asc
- , concat
- , equal
- , floatLit
- , from
- , groupBy
- , having
- , intLit
- , join
- , leftJoin
- , not
- , notInSubQuery
- , null
- , nullIf
- , on
- , orderBy
- , plus
- , project
- , query
- , queryDistinct
- , rawExpr
- , row
- , select
- , selectAs
- , strToDate
- , stringLit
- , when
- , table
- , using
- )
 import MatchExistingRecords (flagNewRecords, useFirst, findExistingRecords)
 import qualified Common
 import Common (parseValue)

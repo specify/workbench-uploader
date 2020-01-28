@@ -40,8 +40,7 @@ import SQLSmart
  , table
  , using
  )
-import qualified UploadPlan as UP
-import UploadPlan (columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..))
+import UploadPlan (columnName, UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..), ColumnType(..), MappingItem(..))
 
 import Prelude ((<$>), const, Show, foldl, fmap, Int, (<>), (.), Maybe(..), ($))
 import qualified Prelude
@@ -50,20 +49,20 @@ import qualified Prelude
 show :: forall a. Show a => a -> Text
 show = pack . Prelude.show
 
-data MappingItem = MappingItem
+data MappingItemInfo = MappingItemInfo
   { tableColumn :: Text
   , tableAlias :: Alias
   , selectFromWBas :: Text
-  , columnType :: UP.ColumnType
+  , colType :: ColumnType
   , mappingId :: Expr
   }
 
 
-parseMappingItem :: Alias -> UP.MappingItem -> MappingItem
-parseMappingItem t (UP.MappingItem {id, columnName, columnType}) = MappingItem
+parseMappingItem :: Alias -> MappingItem -> MappingItemInfo
+parseMappingItem t MappingItem {id, columnName, columnType} = MappingItemInfo
   { mappingId = intLit $ id
   , tableAlias = t
-  , columnType = columnType
+  , colType = columnType
   , selectFromWBas = columnName
   , tableColumn = columnName
   }
@@ -95,40 +94,40 @@ strategyToWhereClause strategy t = case strategy of
     matchAll values = (row $ fmap (\v -> t @@ (column v)) values) <=> (row $ fmap (\v -> rawExpr (value v)) values)
 
 
-toManyMappingItems :: UploadTable -> [MappingItem]
+toManyMappingItems :: UploadTable -> [MappingItemInfo]
 toManyMappingItems (UploadTable {toManyTables}) = do
   (ToMany {toManyTable, records}) <- toManyTables
   mappingItems <- imap (toManyRecordMappingItems toManyTable) records
   mappingItems
 
-toManyRecordMappingItems :: Text -> Int -> ToManyRecord -> [MappingItem]
+toManyRecordMappingItems :: Text -> Int -> ToManyRecord -> [MappingItemInfo]
 toManyRecordMappingItems tableName index (ToManyRecord {mappingItems, toOneTables}) =
   fmap (toManyToOneMappingItems tableName index) toOneTables
   <> fmap (parseToManyMappingItem tableName index) mappingItems
 
 
-toManyToOneMappingItems :: Text -> Int -> ToOne -> MappingItem
-toManyToOneMappingItems tableName index (ToOne {toOneFK, toOneTable}) = MappingItem
+toManyToOneMappingItems :: Text -> Int -> ToOne -> MappingItemInfo
+toManyToOneMappingItems tableName index (ToOne {toOneFK, toOneTable}) = MappingItemInfo
    { selectFromWBas = tableName <> (show index) <> toOneFK
-   , columnType = IntType
+   , colType = IntType
    , mappingId = fromMaybe null $ intLit <$> idMapping toOneTable
    , tableAlias = alias $ tableName <> (show index)
    , tableColumn = toOneFK
    }
 
-parseToManyMappingItem :: Text -> Int -> UP.MappingItem -> MappingItem
-parseToManyMappingItem tableName index (UP.MappingItem {columnName, columnType, id}) = MappingItem
+parseToManyMappingItem :: Text -> Int -> MappingItem -> MappingItemInfo
+parseToManyMappingItem tableName index (MappingItem {columnName, columnType, id}) = MappingItemInfo
   { selectFromWBas = tableName <> ( show index) <> columnName
-  , columnType = columnType
+  , colType = columnType
   , mappingId = intLit id
   , tableAlias = alias $ tableName <> ( show index)
   , tableColumn = columnName
   }
 
-toOneMappingItems :: UploadTable -> Alias -> [MappingItem]
-toOneMappingItems (UploadTable {toOneTables}) t = fmap (\(ToOne {toOneFK, toOneTable}) -> MappingItem
+toOneMappingItems :: UploadTable -> Alias -> [MappingItemInfo]
+toOneMappingItems (UploadTable {toOneTables}) t = fmap (\(ToOne {toOneFK, toOneTable}) -> MappingItemInfo
   { tableColumn = toOneFK
-  , columnType = IntType
+  , colType = IntType
   , mappingId = fromMaybe null $ intLit <$> idMapping toOneTable
   , tableAlias = t
   , selectFromWBas = toOneFK
@@ -157,7 +156,7 @@ joinToMany t tableName foreignKey tr index (ToManyRecord {filters}) =
     filterExprs = fmap (\(NamedValue {column, value}) -> (a @@ column) `equal` (rawExpr value)) filters
 
 
-rowsFromWB :: Expr -> [MappingItem] -> QueryExpr -> QueryExpr
+rowsFromWB :: Expr -> [MappingItemInfo] -> QueryExpr -> QueryExpr
 rowsFromWB wbId mappingItems excludeRows =
   query (imap selectWBVal mappingItems <> [select $ r @@ "workbenchrowid", select $ r @@ "rownumber"])
   `from`
@@ -172,8 +171,8 @@ rowsFromWB wbId mappingItems excludeRows =
   where
     r = alias "r"
     c i = alias $ "c" <> ( show i)
-    selectWBVal i item = selectAs (selectFromWBas item) $ parseValue (columnType item) ((c i) @@ "celldata")
-    joinWBCell :: TableRef -> Int -> MappingItem -> TableRef
+    selectWBVal i item = selectAs (selectFromWBas item) $ parseValue (colType item) ((c i) @@ "celldata")
+    joinWBCell :: TableRef -> Int -> MappingItemInfo -> TableRef
     joinWBCell left i item =
       left `leftJoin` (table "workbenchdataitem" `as` c i)
       `on`
@@ -181,7 +180,7 @@ rowsFromWB wbId mappingItems excludeRows =
         `and` (((c i) @@ "workbenchtemplatemappingitemid") `equal` (mappingId item))
       )
 
-valuesFromWB :: Expr -> [MappingItem] -> QueryExpr -> QueryExpr
+valuesFromWB :: Expr -> [MappingItemInfo] -> QueryExpr -> QueryExpr
 valuesFromWB wbId mappingItems excludeRows =
   queryDistinct (imap selectWBVal mappingItems)
   `from`
@@ -198,8 +197,8 @@ valuesFromWB wbId mappingItems excludeRows =
   where
     r = alias "r"
     c i = alias $ "c" <> ( show i)
-    selectWBVal i item = selectAs (selectFromWBas item) $ parseValue (columnType item) $ c i @@ "celldata"
-    joinWBCell :: TableRef -> Int -> MappingItem -> TableRef
+    selectWBVal i item = selectAs (selectFromWBas item) $ parseValue (colType item) $ c i @@ "celldata"
+    joinWBCell :: TableRef -> Int -> MappingItemInfo -> TableRef
     joinWBCell left i item =
       left `leftJoin` (table "workbenchdataitem" `as` c i)
       `on`

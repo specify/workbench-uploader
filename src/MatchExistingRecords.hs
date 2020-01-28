@@ -7,8 +7,8 @@ import Control.Newtype.Generics (unpack)
 
 import MonadSQL (MonadSQL, execute)
 import SQLSmart
-import UploadPlan (WorkbenchId(..), UploadPlan(..), UploadStrategy(..), ToOne(..), UploadTable(..), ToMany(..), ToManyRecord, NamedValue(..), ToManyRecord(..))
-import Common (rowsWithValuesFor, rowsFromWB, joinToManys, toOneMappingItems, toManyMappingItems, strategyToWhereClause, parseMappingItem, MappingItem(..))
+import UploadPlan (WorkbenchId(..), UploadPlan(..), UploadTable(..))
+import Common (rowsWithValuesFor, rowsFromWB, joinToManys, toOneMappingItems, toManyMappingItems, strategyToWhereClause, parseMappingItem, MappingItemInfo(..))
 
 
 clean :: MonadSQL m => UploadPlan -> m ()
@@ -80,8 +80,8 @@ findExistingRecords (WorkbenchId wbId) ut@(UploadTable {tableName, idColumn, str
     wb = alias "wb"
     st = foldl when
     mappingItems' = fmap (parseMappingItem t) mappingItems <> toOneMappingItems ut t <> toManyMappingItems ut
-    valuesFromWB = row $ fmap (\(MappingItem {selectFromWBas}) -> wb @@ selectFromWBas) mappingItems'
-    valuesFromTable = row $ fmap (\(MappingItem {tableAlias, tableColumn}) -> tableAlias @@ tableColumn) mappingItems'
+    valuesFromWB = row $ fmap (\(MappingItemInfo {selectFromWBas}) -> wb @@ selectFromWBas) mappingItems'
+    valuesFromTable = row $ fmap (\(MappingItemInfo {tableAlias, tableColumn}) -> tableAlias @@ tableColumn) mappingItems'
     wbSubQuery = subqueryAs wb $ rowsFromWB (intLit wbId) mappingItems' excludeRows
     excludeRows = rowsWithValuesFor $ fromMaybe null $ intLit <$> idMapping
 
