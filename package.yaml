@@ -1,0 +1,42 @@
+name: workbench-upload
+version: '0.1.0.0'
+category: Database
+author: Specify Software Consortium
+maintainer: anhalt@ku.edu
+copyright: 2019 Specify Software Consortium
+license: GPL-3
+homepage: https://github.com/githubuser/workbench-uploader#readme
+extra-source-files:
+- README.md
+default-extensions:
+- DuplicateRecordFields
+- NamedFieldPuns
+- OverloadedStrings
+- RankNTypes
+- DeriveGeneric
+- GeneralizedNewtypeDeriving
+- ScopedTypeVariables
+- FlexibleInstances
+ghc-options:
+- -Wall
+- -Wcompat
+- -Wincomplete-record-updates
+- -Wincomplete-uni-patterns
+- -Wredundant-constraints
+dependencies:
+- base >=4.7 && <5
+- text
+- ilist
+- extra
+- mtl
+- prettyprinter
+- newtype-generics
+- pcre-light
+- aeson
+- aeson-pretty
+- bytestring
+- mysql-simple
+executables:
+  workbench-upload:
+    main: Main.hs
+    source-dirs: src
